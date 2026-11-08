@@ -1,5 +1,5 @@
 const test=require('node:test');const assert=require('node:assert/strict');const path=require('node:path');
-const {installNeeded,runtimePaths,checked}=require('./launcher.cjs');
+const {installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm}=require('./launcher.cjs');
 test('앱 또는 브라우저 라이브러리가 없을 때만 설치한다',()=>{
  assert.equal(installNeeded('/app',()=>true),false);
  assert.equal(installNeeded('/app',file=>!file.endsWith('electron.exe')),true);
@@ -14,4 +14,16 @@ test('설치 실패를 숨기지 않고 실행을 멈춘다',()=>{
  assert.throws(()=>checked({status:1},'설치'),/중단/);
  assert.throws(()=>checked({error:new Error('실행 불가')},'설치'),/실행 불가/);
  assert.deepEqual(checked({status:0},'설치'),{status:0});
+});
+test('Windows 공백 경로를 셸이나 따옴표 변환 없이 npm에 전달한다',()=>{
+ const prefix='C:\\Users\\테스트 사용자\\AppData\\Local\\BlogautoNaverOriginal\\codex-tools';let actual;
+ invokeNpm('C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js',['install','--prefix',prefix,'@openai/codex'],{},(file,args,options)=>{actual={file,args,options};return{status:0};});
+ assert.equal(actual.args[3],prefix);assert.equal(actual.options.shell,false);assert.equal(actual.args[3].includes('"'),false);
+ const expected='C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js';
+ assert.equal(resolveNpmCli('C:\\Program Files\\nodejs\\node.exe',[],file=>file===expected,path.win32),expected);
+});
+test('실제 npm CLI에서 공백·한글·특수문자 설치 경로를 그대로 인식한다',()=>{
+ const fs=require('node:fs'),os=require('node:os');const folder=fs.mkdtempSync(path.join(os.tmpdir(),'blog npm 한글 & '));
+ try{const result=invokeNpm(resolveNpmCli(process.execPath),['--prefix',folder,'prefix'],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.trim(),folder);}
+ finally{fs.rmSync(folder,{recursive:true,force:true});}
 });

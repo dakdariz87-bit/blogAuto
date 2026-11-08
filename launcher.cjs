@@ -2,6 +2,20 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
+const LAUNCHER_VERSION='0.1.1';
+
+function resolveNpmCli(nodeExecutable,wrappers=[],exists=fs.existsSync,pathApi=path){
+  const dirs=[pathApi.dirname(nodeExecutable),...wrappers.map(file=>pathApi.dirname(file))];
+  for(const dir of dirs){
+    for(const file of [pathApi.join(dir,'node_modules','npm','bin','npm-cli.js'),pathApi.join(dir,'..','lib','node_modules','npm','bin','npm-cli.js')]){
+      if(exists(file))return file;
+    }
+  }
+  throw new Error('npm 실행 파일을 찾지 못했습니다. Node.js LTS를 복구 설치한 뒤 다시 실행해주세요.');
+}
+function invokeNpm(npmCli,args,options={},runner=spawnSync){
+  return runner(process.execPath,[npmCli,...args],{...options,shell:false});
+}
 
 function installNeeded(root,exists=fs.existsSync){
   return !exists(path.join(root,'node_modules','electron','dist','electron.exe')) ||
@@ -19,17 +33,21 @@ function checked(result,label){
 }
 function main(){
   if(process.platform!=='win32')throw new Error('바로실행.cmd는 Windows용입니다.');
+  console.log('BlogAuto 실행 도우미 v'+LAUNCHER_VERSION);
   if(Number(process.versions.node.split('.')[0])<20)throw new Error('Node.js LTS 20 이상을 설치한 뒤 다시 실행해주세요.');
   const root=__dirname;
   if(!fs.existsSync(path.join(root,'package.json')))throw new Error('ZIP 압축을 모두 풀고 바로실행.cmd를 실행해주세요.');
   const folders=runtimePaths(process.env.LOCALAPPDATA);
   fs.mkdirSync(folders.runtime,{recursive:true});fs.mkdirSync(folders.tools,{recursive:true});
   const env={...process.env,BLOGAUTO_RUNTIME_ROOT:folders.runtime,BLOGAUTO_CODEX_TOOLS:folders.tools,npm_config_cache:folders.cache};
-  const run=command=>spawnSync(process.env.ComSpec || 'cmd.exe',['/d','/s','/c',command],{cwd:root,env,stdio:'inherit'});
+  const npmFound=spawnSync('where.exe',['npm.cmd'],{env,encoding:'utf8'});
+  const npmCli=resolveNpmCli(process.execPath,npmFound.status===0?npmFound.stdout.trim().split(/\r?\n/):[]);
+  const npm=args=>invokeNpm(npmCli,args,{cwd:root,env,stdio:'inherit'});
+  const run=command=>spawnSync(process.env.ComSpec || 'cmd.exe',['/d','/s','/c',command],{cwd:root,env,stdio:'inherit',windowsVerbatimArguments:true});
   console.log('\n[1/4] 프로그램 설치 상태 확인');
   if(installNeeded(root)){
     console.log('처음 실행에는 필요한 패키지와 앱을 내려받습니다. 몇 분 걸릴 수 있습니다. 진행 중에는 이 창을 닫지 마세요.');
-    checked(run('npm ci --no-audit --no-fund'),'프로그램 패키지 설치');
+    checked(npm(['ci','--no-audit','--no-fund']),'프로그램 패키지 설치');
   }else console.log('설치된 프로그램을 사용합니다.');
 
   console.log('\n[2/4] Codex CLI 확인');
@@ -40,7 +58,7 @@ function main(){
   if(!codexCmd && found.status===0)codexCmd=found.stdout.split(/\r?\n/).find(line=>line.trim())?.trim() || '';
   if(!codexCmd && !fs.existsSync(path.join(localBin,'codex.cmd'))){
     console.log('Codex CLI를 이 프로그램 전용 폴더에 설치합니다.');
-    checked(run('npm install --prefix "%BLOGAUTO_CODEX_TOOLS%" --no-audit --no-fund @openai/codex'),'Codex CLI 설치');
+    checked(npm(['install','--prefix',folders.tools,'--no-audit','--no-fund','@openai/codex']),'Codex CLI 설치');
   }
   if(!codexCmd)codexCmd=path.join(localBin,'codex.cmd');
   env.PATH=path.dirname(codexCmd)+path.delimiter+localBin+path.delimiter+(env.PATH || '');
@@ -59,5 +77,5 @@ function main(){
   console.log('\n[4/4] 원본 프로그램을 엽니다. 네이버 로그인은 프로그램의 세션 확인에서 진행하세요.');
   checked(spawnSync(path.join(root,'node_modules','electron','dist','electron.exe'),[root],{cwd:root,env,stdio:'inherit'}),'프로그램 실행');
 }
-module.exports={installNeeded,runtimePaths,checked};
+module.exports={installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm};
 if(require.main===module){try{main();}catch(error){console.error('\n실행을 완료하지 못했습니다: '+error.message);process.exitCode=1;}}
