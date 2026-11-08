@@ -1,0 +1,29 @@
+name: Windows launcher verification
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install original dependencies without automatic install scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Launcher and real process timeout tests
+        run: node --test launcher.test.cjs electron-setup.test.cjs setup-supervisor.test.cjs
+      - name: Original source checks
+        run: npm run check
+      - name: Download verified Electron and open original app on Windows
+        run: node verify-windows-launcher.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-v0.1.5-verification
+          path: verification-output/

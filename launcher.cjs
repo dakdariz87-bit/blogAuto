@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.1.4';
+const LAUNCHER_VERSION='0.1.5';
 
 function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
   const env={...original};
@@ -29,7 +29,7 @@ function ensureElectronInstalled(root,env,runner=spawnSync){
   if(electronReady(packageDir))return executable;
   if(!fs.existsSync(path.join(packageDir,'package.json')))throw new Error('Electron 패키지가 없습니다. 설치 단계 오류를 확인해주세요.');
   console.log('Electron의 공식 Windows 배포 파일을 직접 설치합니다. 첫 다운로드에는 몇 분 걸릴 수 있습니다.');
-  checked(runner(process.execPath,[setup,packageDir],{cwd:root,env,stdio:'inherit',shell:false}),'Electron 실행 파일 설치');
+  checked(runner(process.execPath,[setup,packageDir],{cwd:root,env,stdio:'inherit',shell:false,timeout:900000,killSignal:'SIGKILL'}),'Electron 실행 파일 설치');
   if(!electronReady(packageDir))throw new Error('Electron 실행 파일 검증에 실패했습니다. 위 설치 로그를 확인해주세요.');
   return executable;
 }
@@ -76,7 +76,7 @@ function main(){
   console.log('\n[1/4] 프로그램 설치 상태 확인');
   if(installNeeded(root)){
     console.log('처음 실행에는 필요한 패키지와 앱을 내려받습니다. 몇 분 걸릴 수 있습니다. 진행 중에는 이 창을 닫지 마세요.');
-    checked(npm(['ci','--no-audit','--no-fund']),'프로그램 패키지 설치');
+    checked(npm(['ci','--ignore-scripts','--no-audit','--no-fund']),'프로그램 패키지 설치');
   }else console.log('설치된 프로그램을 사용합니다.');
   const electronExecutable=ensureElectronInstalled(root,env);
 
@@ -97,7 +97,7 @@ function main(){
   settings.writeSettings(folders.runtime,{codexCmdPath:path.extname(codexCmd).toLowerCase()==='.exe'?codexCmd:'codex.cmd'});
   console.log('\n[3/4] Codex 로그인 상태 확인');
   const authCommand=codexInvocation(codexCmd,['login','status']);
-  const auth=spawnSync(authCommand.file,authCommand.args,{cwd:root,env,stdio:'ignore',shell:false});
+  const auth=spawnSync(authCommand.file,authCommand.args,{cwd:root,env,stdio:'ignore',shell:false,timeout:20000});
   if(auth.status!==0){
     console.log('브라우저에서 본인 ChatGPT/Codex 계정으로 로그인해주세요. 로그인은 직접 완료해야 합니다.');
     const login=codexInvocation(codexCmd,['login']);

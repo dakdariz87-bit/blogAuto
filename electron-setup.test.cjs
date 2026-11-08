@@ -1,29 +1,20 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {electronReady,installElectron,networkDownloader}=require('./electron-setup.cjs');
-function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'electron-artifact-'));fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({version:'31.7.7'}));fs.writeFileSync(path.join(root,'checksums.json'),JSON.stringify({'electron-v31.7.7-win32-x64.zip':'expected-checksum'}));return root;}
-function writeDist(dir,version='31.7.7',header='MZtest'){fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'electron.exe'),header);fs.writeFileSync(path.join(dir,'version'),version);}
-test('다운로드 생략·다른 OS 설정이 있어도 명시한 Windows 배포판과 체크섬을 사용한다',async()=>{
- const root=fixture(),previous=process.env.ELECTRON_SKIP_BINARY_DOWNLOAD;process.env.ELECTRON_SKIP_BINARY_DOWNLOAD='1';let called=false;
- try{await installElectron({packageDir:root,platform:'win32',arch:'x64',downloadArtifact:async options=>{called=true;assert.equal(options.platform,'win32');assert.equal(options.arch,'x64');assert.equal(options.checksums['electron-v31.7.7-win32-x64.zip'],'expected-checksum');return 'verified-archive';},extract:async(_,options)=>writeDist(options.dir)});assert.equal(called,true);assert.equal(electronReady(root),true);}
- finally{if(previous===undefined)delete process.env.ELECTRON_SKIP_BINARY_DOWNLOAD;else process.env.ELECTRON_SKIP_BINARY_DOWNLOAD=previous;fs.rmSync(root,{recursive:true,force:true});}
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
+const {supervise}=require('./setup-supervisor.cjs');const {installElectron,electronReady}=require('./electron-setup.cjs');
+function root(){return fs.mkdtempSync(path.join(os.tmpdir(),'blog-install 한글 & '));}
+test('진짜 worker 프로세스가 검증된 캐시를 재사용한다',async()=>{
+ const dir=root(),fileName='cached.zip',body=Buffer.from('cached content');fs.writeFileSync(path.join(dir,fileName),body);
+ try{const result=await supervise({mode:'download',cacheRoot:dir,fileName,checksum:crypto.createHash('sha256').update(body).digest('hex'),url:'https://invalid.invalid/'},{idleMs:5000});assert.equal(result.cached,true);assert.equal(result.zip,path.join(dir,fileName));}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
-test('잘못된 실행 파일은 설치하지 않고 기존 배포 파일을 보존한다',async()=>{
- const root=fixture();writeDist(path.join(root,'dist'),'old-version');fs.writeFileSync(path.join(root,'path.txt'),'electron.exe');
- try{await assert.rejects(installElectron({packageDir:root,downloadArtifact:async()=> 'archive',extract:async(_,options)=>writeDist(options.dir,'31.7.7','ELF-not-windows')}),/Windows 실행 파일/);assert.equal(fs.readFileSync(path.join(root,'dist','version'),'utf8'),'old-version');}
- finally{fs.rmSync(root,{recursive:true,force:true});}
+test('잘못된 캐시를 설치하지 않고 네트워크 실패를 보고한다',async()=>{
+ const dir=root();fs.writeFileSync(path.join(dir,'bad.zip'),'bad');
+ try{await assert.rejects(supervise({mode:'download',cacheRoot:dir,fileName:'bad.zip',checksum:'0'.repeat(64),url:'https://127.0.0.1:1/'},{idleMs:5000}),/curl|connect|연결|Failed/i);assert.equal(fs.readFileSync(path.join(dir,'bad.zip'),'utf8'),'bad');}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
-test('올바른 버전·실행 파일·경로가 있으면 재다운로드하지 않는다',async()=>{
- const root=fixture();writeDist(path.join(root,'dist'));fs.writeFileSync(path.join(root,'path.txt'),'electron.exe');
- try{assert.equal(electronReady(root),true);await installElectron({packageDir:root,downloadArtifact:async()=>{throw new Error('다운로드하면 안 됨');}});}
- finally{fs.rmSync(root,{recursive:true,force:true});}
+test('첫 서버 프로세스가 멈추면 강제 종료 후 두 번째 서버로 넘어간다',async()=>{
+ const dir=root(),workerFile=path.join(dir,'fake.cjs');fs.writeFileSync(path.join(dir,'package.json'),JSON.stringify({version:'31.7.7'}));fs.writeFileSync(path.join(dir,'checksums.json'),JSON.stringify({'electron-v31.7.7-win32-x64.zip':'0'.repeat(64)}));
+ fs.writeFileSync(workerFile,`const fs=require('fs'),path=require('path');process.on('message',c=>{if(c.url==='hang'){while(true){}}if(c.mode==='extract'){fs.mkdirSync(path.join(c.packageDir,'dist'));fs.writeFileSync(path.join(c.packageDir,'dist','electron.exe'),'MZ');fs.writeFileSync(path.join(c.packageDir,'dist','version'),c.version);fs.writeFileSync(path.join(c.packageDir,'path.txt'),'electron.exe');}process.send({type:'result',value:{zip:'fixture.zip'}},()=>process.disconnect());});`);
+ try{await installElectron({packageDir:dir,arch:'x64',workerFile,idleMs:1200,totalMs:5000,onEvent:()=>{},sources:[{name:'hang',url:'hang'},{name:'fallback',url:'ok'}]});assert.equal(electronReady(dir),true);}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
-test('공식 배포 연결이 실패하면 동일 체크섬을 유지한 채 미러로 전환한다',async()=>{
- const root=fixture();let calls=0;const sources=[];
- try{await installElectron({packageDir:root,downloadArtifact:async options=>{calls++;sources.push(await options.mirrorOptions.resolveAssetURL());assert.equal(options.checksums['electron-v31.7.7-win32-x64.zip'],'expected-checksum');if(calls===1)throw new Error('연결 시간 초과');return 'verified-archive';},extract:async(_,options)=>writeDist(options.dir)});assert.equal(calls,2);assert.ok(sources[0].startsWith('https://github.com/'));assert.ok(sources[1].startsWith('https://npmmirror.com/'));assert.equal(electronReady(root),true);}
- finally{fs.rmSync(root,{recursive:true,force:true});}
-});
-test('응답하지 않는 실제 HTTP 서버에서 다운로드 제한 시간이 작동한다',async()=>{
- const http=require('node:http'),got=require('got');const root=fixture();const server=http.createServer(()=>{});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- try{const started=Date.now();await assert.rejects(networkDownloader(got,()=>{},{response:60,request:250}).download('http://127.0.0.1:'+server.address().port+'/',path.join(root,'stalled.zip')),/Timeout|timeout|time/i);assert.ok(Date.now()-started<1500);}
- finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fs.rmSync(root,{recursive:true,force:true});}
+test('다운로드 파일 체크섬이 다르면 기존 실행 파일을 보존한다',async()=>{
+ const dir=root(),zip=path.join(dir,'bad.zip');fs.writeFileSync(zip,'wrong');fs.mkdirSync(path.join(dir,'dist'));fs.writeFileSync(path.join(dir,'dist','electron.exe'),'MZold');
+ try{await assert.rejects(supervise({mode:'extract',packageDir:dir,zip,checksum:'0'.repeat(64),version:'31.7.7'},{idleMs:5000}),/체크섬/);assert.equal(fs.readFileSync(path.join(dir,'dist','electron.exe'),'utf8'),'MZold');}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

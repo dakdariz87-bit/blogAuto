@@ -1,5 +1,5 @@
 1. 다운로드한 ZIP을 완전히 압축 해제하세요.
-   v0.1.4로 기존 폴더를 갱신할 때는 launcher.cjs, electron-setup.cjs, VERSION.txt를 함께 덮어쓰세요.
+   v0.1.5는 새 폴더에 압축을 모두 풀어 실행하세요. 보조 파일들이 추가되어 일부 파일만 복사하면 안 됩니다.
 2. 폴더 안의 '바로실행.cmd'를 더블클릭하세요.
 3. 처음에는 필요한 앱 패키지와 Codex CLI를 설치합니다. 설치 진행 중 창을 닫지 마세요.
 4. Codex 로그인이 필요하면 열린 브라우저에서 직접 로그인하세요.
@@ -11,4 +11,6 @@ Codex의 본인 로그인 방식과 사용량 한도가 적용됩니다.
 
 원본 src/, scripts/, package.json, package-lock.json 등 기존 28개 파일은 그대로 두고 실행 도우미만 추가했습니다.
 설정·원고는 Windows의 LocalAppData/BlogautoNaverOriginal에 저장합니다.
-Windows에서 실제 실행한 검증은 아직 완료하지 못했습니다. 오류가 나오면 위쪽 오류 문구를 캡처해주세요.
+설치 실패 시 창에 표시된 서버별 오류를 확인하세요. 다운로드 MB가 증가하면 정상 진행 중입니다.
+실제 진행이 30초 멈추면 해당 작업을 강제 종료하고 다음 서버를 시도합니다.
+GitHub Actions의 Windows launcher verification에서 Windows 검증 결과와 앱 화면을 확인할 수 있습니다.
