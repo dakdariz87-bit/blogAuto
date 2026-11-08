@@ -1302,3 +1302,4 @@ body { height:auto; min-height:100vh; overflow:visible; }
 .category-extra { grid-column:1/-1; }
 .category-extra summary { cursor:pointer; color:#50635b; padding:8px 0; }
 .category-extra-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding-top:8px; }
+.agent-model-toolbar { grid-template-columns:minmax(220px,280px) repeat(4,minmax(100px,124px)); flex-basis:720px; max-width:808px; }

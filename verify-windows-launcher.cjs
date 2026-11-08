@@ -26,6 +26,7 @@ async function main(){
   await page.locator('#dismissStartupNoticeButton').click();
   await page.getByText('2개 모델 조회됨.',{exact:false}).waitFor({timeout:25000});
   if(await page.locator('#chatgptConnectionBadge').innerText()!=='연결됨')throw new Error('Codex fixture connection UI failed');
+  const modelBox=await page.locator('#codexModel').boundingBox(),effortBox=await page.locator('#mainAgentModel').boundingBox();if(modelBox.x+modelBox.width>effortBox.x)throw new Error('Model picker overlaps next control');
   if(await page.locator('#codexModel').inputValue()!=='gpt-6-astra')throw new Error('Saved Astra model was lost');
   await page.locator('#codexModel').selectOption('gpt-6.1-sol');
   await page.waitForFunction(async()=> (await window.blogAuto.getInitialData()).settings.codexModel==='gpt-6.1-sol');

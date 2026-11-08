@@ -314,13 +314,13 @@ function updateSessionNotice() {
   }
 
   if (!accounts.length) {
-    text.textContent = "처음 실행 상태입니다. 계정을 추가한 뒤 계정별 세션 확인을 눌러 브라우저에서 로그인을 완료해 주세요.";
+    text.textContent = "상단 2. 네이버 연결에 블로그 주소를 입력하고 열린 Chrome에서 로그인하세요.";
   } else {
     const names = accounts
       .filter((account) => account.sessionStatus !== "valid")
       .map((account) => accountDisplayName(account))
       .join(", ");
-    text.textContent = `로그인이 필요한 계정: ${names}. 계정별로 선택 후 세션 확인을 진행해 주세요.`;
+    text.textContent = `로그인이 필요한 계정: ${names}. 해당 계정을 선택하고 상단 네이버 연결을 눌러주세요.`;
   }
   notice.hidden = false;
 }

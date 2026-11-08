@@ -23,6 +23,7 @@ async function main(){
  await page.goto('http://127.0.0.1:'+server.address().port+'/');
  await page.getByText('2개 모델 조회됨.',{exact:false}).waitFor();
  assert.equal(await page.locator('#chatgptConnectionBadge').innerText(),'연결됨');
+ const modelBox=await page.locator('#codexModel').boundingBox(),effortBox=await page.locator('#mainAgentModel').boundingBox();assert.ok(modelBox.x+modelBox.width<=effortBox.x,'Model and effort controls overlap');
  await page.locator('#codexModel').selectOption('gpt-6-astra');await page.waitForFunction(()=>window.fixture.settings.codexModel==='gpt-6-astra');
  assert.equal(await page.locator('option[value="gpt-6.1-terra"]').evaluate(option=>option.disabled),true);
  await page.locator('#quickBlogAddress').fill('https://example.com/blog');await page.locator('#connectNaverButton').click();
