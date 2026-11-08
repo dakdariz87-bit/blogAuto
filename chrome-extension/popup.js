@@ -1,41 +1,65 @@
-const title = document.querySelector('#title');
-const body = document.querySelector('#body');
-const confirm = document.querySelector('#confirm');
-const button = document.querySelector('#insert');
-const status = document.querySelector('#status');
-let loaded = false;
-let activeTab;
-let requesting = false;
-const update = () => { button.disabled = requesting || !loaded || !confirm.checked || !title.value.trim() || !body.value.trim(); };
-for (const el of [title, body, confirm]) el.addEventListener('input', update);
-try {
-  const response = await fetch('draft.json');
-  if (!response.ok) throw new Error('초안을 읽지 못했습니다.');
-  const draft = await response.json();
-  title.value = draft.title;
-  body.value = draft.body;
-  [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const key = 'status-' + activeTab.id;
-  const previous = await chrome.storage.local.get(key);
-  status.textContent = previous[key] || '버전 0.3.0 · 빈 새 글에서 입력해주세요.';
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[key]) status.textContent = changes[key].newValue;
-  });
-  loaded = true;
-  update();
-} catch (error) { status.textContent = error.message; }
-button.addEventListener('click', async () => {
-  requesting = true;
-  update();
-  try {
-    const url = new URL(activeTab.url);
-    if (url.hostname !== 'blog.naver.com' || !/PostWriteForm\.naver$/.test(url.pathname) || url.searchParams.get('blogId') !== 'dakdariz') {
-      throw new Error('dakdariz 새 글쓰기 탭에서 확장 프로그램을 다시 열어주세요.');
-    }
-    status.textContent = '입력을 시작합니다. 잠시 브라우저를 조작하지 마세요.';
-    const result = await chrome.runtime.sendMessage({ type: 'insert-post', tabId: activeTab.id, post: { title: title.value, body: body.value } });
-    if (!result?.accepted) throw new Error(result?.reason || '입력을 시작하지 못했습니다.');
-    confirm.checked = false;
-  } catch (error) { status.textContent = error.message; }
-  finally { requesting = false; update(); }
+import { imageSuggestions, composeBody, paragraphs } from './layout.js';
+const $=selector=>document.querySelector(selector);
+const title=$('#title'), body=$('#body'), confirm=$('#confirm'), button=$('#insert'), status=$('#status');
+let activeTab,slots=[],loaded=false,requesting=false;
+const tabId=Number(new URL(location.href).searchParams.get('tabId')) || null;
+if(tabId) { document.body.classList.add('large'); $('#large').hidden=true; }
+const stateKey=()=> 'draft-state-'+activeTab.id;
+let timer;
+function saveSoon(){clearTimeout(timer);timer=setTimeout(()=>chrome.storage.local.set({[stateKey()]:{title:title.value,body:body.value,align:$('#align').value,slots}}),200);}
+function renderPreview(){
+  const preview=$('#preview'); preview.replaceChildren(); preview.style.textAlign=$('#align').value;
+  const heading=document.createElement('h3');heading.textContent=title.value;preview.append(heading);
+  for(const block of paragraphs(composeBody(body.value,slots))){
+    const el=document.createElement(block.startsWith('【이미지 ')?'div':'p');
+    if(block.startsWith('【이미지 ')) el.className='image-marker';
+    el.textContent=block;preview.append(el);
+  }
+}
+function renderSlots(){
+  $('#slots').replaceChildren();
+  for(const slot of slots){
+    const card=document.createElement('div');card.className='slot';
+    const label=document.createElement('label'), check=document.createElement('input');
+    check.type='checkbox';check.checked=Boolean(slot.checked);
+    label.append(check,document.createTextNode(' '+slot.label+' 뒤'));
+    const description=document.createElement('input');description.type='text';description.value=slot.description;description.setAttribute('aria-label','이미지 설명');
+    check.addEventListener('change',()=>{slot.checked=check.checked;changed();});
+    description.addEventListener('input',()=>{slot.description=description.value;changed();});
+    card.append(label,description);$('#slots').append(card);
+  }
+}
+function update(){button.disabled=requesting || !loaded || !confirm.checked || !title.value.trim() || !body.value.trim();}
+function changed(){renderPreview();update();if(loaded)saveSoon();}
+for(const el of [title,body,$('#align')])el.addEventListener('input',changed);
+confirm.addEventListener('input',update);
+$('#suggest').addEventListener('click',()=>{slots=imageSuggestions(body.value);renderSlots();changed();});
+$('#large').addEventListener('click',async()=>{
+  if(!activeTab)return;
+  await chrome.storage.local.set({[stateKey()]:{title:title.value,body:body.value,align:$('#align').value,slots}});
+  await chrome.windows.create({url:chrome.runtime.getURL('popup.html')+'?tabId='+activeTab.id,type:'popup',width:1180,height:900});
+  window.close();
+});
+try{
+  activeTab=tabId ? await chrome.tabs.get(tabId) : (await chrome.tabs.query({active:true,currentWindow:true}))[0];
+  const draft=await(await fetch('draft.json')).json();
+  const key='status-'+activeTab.id, state=await chrome.storage.local.get([key,stateKey()]);
+  const saved=state[stateKey()] || {};
+  title.value=saved.title ?? draft.title; body.value=saved.body ?? draft.body;
+  $('#align').value=saved.align || 'center';
+  slots=saved.slots || imageSuggestions(body.value);
+  status.textContent=state[key] || '버전 0.4.0 · 가운데 정렬과 줄바꿈을 적용합니다. 이미지 위치는 원하는 항목을 체크하세요.';
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[key])status.textContent=changes[key].newValue;});
+  loaded=true;renderSlots();changed();
+}catch(error){status.textContent=error.message;}
+button.addEventListener('click',async()=>{
+  requesting=true;update();
+  try{
+    const tab=await chrome.tabs.get(activeTab.id),url=new URL(tab.url);
+    if(url.hostname!=='blog.naver.com'||!/PostWriteForm[.]naver$/.test(url.pathname)||url.searchParams.get('blogId')!=='dakdariz') throw new Error('원래 dakdariz 새 글쓰기 탭이 열려 있는지 확인해주세요.');
+    status.textContent='입력 준비 중… 네이버 탭으로 전환합니다.';
+    const result=await chrome.runtime.sendMessage({type:'insert-post',tabId:activeTab.id,post:{title:title.value,body:composeBody(body.value,slots),align:$('#align').value}});
+    if(!result?.accepted)throw new Error(result?.reason || '입력을 시작하지 못했습니다.');
+    confirm.checked=false;
+  }catch(error){status.textContent=error.message;}finally{requesting=false;update();}
 });
