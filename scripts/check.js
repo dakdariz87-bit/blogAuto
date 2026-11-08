@@ -1544,7 +1544,7 @@ if (
 if (
   !sourceFiles.codexRunner.content.includes("function compactSearchResultsForPrompt")
   || !sourceFiles.codexRunner.content.includes("maxResults: 6")
-  || !sourceFiles.codexRunner.content.includes("excerptChars: 420")
+  || !sourceFiles.codexRunner.content.includes("excerptChars: 6000")
 ) {
   failed = true;
   console.error("src/lib/codexRunner.js: Research/Title search rerun prompt must use compact narrowed source candidates");
@@ -2267,3 +2267,8 @@ if (failed) {
 }
 
 console.log(`Syntax check passed for ${targets.length} JavaScript files.`);
+
+const extractedInstitutionBody = require('../src/lib/search')._private.extractReadableText('<main><div class="content">' + 'Intro '.repeat(400) + '</div><section>Evidence near the end</section></main>');
+if (!extractedInstitutionBody.includes('Evidence near the end')) throw new Error('Institutional body tail lost');
+const retryEvidence = imageContractPrivate.buildResearchTitleRetryPrompt({jobDir:'.',searchResults:[{title:"Institutional evidence",url:"https://www.nhs.uk/test",excerpt:extractedInstitutionBody}]},{});
+if (!retryEvidence.includes('Evidence near the end')) throw new Error('Research handoff lost evidence tail');

@@ -968,6 +968,10 @@ function buildResearchTitlePrompt({
     "- BLOGAUTO_PROGRESS: save",
     "",
     "Core rules:",
+    "- Keep the scope proportional to the user's topic and available evidence. Do not invent extra mandatory coverage (exercise dosage, diagnoses, detailed triage, or ergonomic measurements) for a general educational article.",
+    "- If the user's core topic can be supported, narrow the title promise and writerContract to supported claims. Omit unsupported optional recommendations and numerical prescriptions. Document these omissions in safetyBoundaries and notes. Never mark unsupported claims as confirmed.",
+    "- Essential precautions for any advice you retain must remain supported. If the core topic or essential precautions cannot be supported, keep REVISION/BLOCK and request the exact missing evidence; narrowing scope is not permission to bypass this check.",
+
     hasSearchCandidates
       ? "- Search/source candidates are provided because the Research/Title Agent or the app determined they are needed. Analyze them as signals and facts, not as copy material."
       : "- No NAVER/GOOGLE search candidates have been collected yet. First judge whether search is needed from the input itself; do not assume search was already performed.",
@@ -1006,7 +1010,7 @@ function buildResearchTitlePrompt({
     "Search/source candidates:",
     JSON.stringify(compactSearchResultsForPrompt(searchResults, {
       maxResults: 6,
-      excerptChars: 420
+      excerptChars: 6000
     }), null, 2),
     "",
     "Source quality summary:",
@@ -1059,11 +1063,15 @@ function buildResearchTitleRetryPrompt(options, previousResearchResult) {
     options.researchRevisionContext ? "Additional revision context:" : "",
     options.researchRevisionContext || "",
     "New/merged search candidates:",
-    JSON.stringify(compactSearchResultsForPrompt(options.searchResults, { maxResults: 6, excerptChars: 420 }), null, 2),
+    JSON.stringify(compactSearchResultsForPrompt(options.searchResults, { maxResults: 6, excerptChars: 6000 }), null, 2),
     "Source quality summary:",
     JSON.stringify(options.sourceQuality || { status: "unknown" }, null, 2),
     "",
     "Revision rules:",
+    "- Keep the scope proportional to the user's topic and available evidence. Do not invent extra mandatory coverage (exercise dosage, diagnoses, detailed triage, or ergonomic measurements) for a general educational article.",
+    "- If the user's core topic can be supported, narrow the title promise and writerContract to supported claims. Omit unsupported optional recommendations and numerical prescriptions. Document these omissions in safetyBoundaries and notes. Never mark unsupported claims as confirmed.",
+    "- Essential precautions for any advice you retain must remain supported. If the core topic or essential precautions cannot be supported, keep REVISION/BLOCK and request the exact missing evidence; narrowing scope is not permission to bypass this check.",
+
     `- Search candidates are ${hasSearchCandidates ? "available" : "not available"}. Do not use browser, network, or unrelated file reads; use only this handoff.`,
     "- Preserve a manual user topic. In auto mode keep one narrow keyword lane and choose a concrete source-backed subject/event, not a category-level generic title.",
     "- Reassess status, finalTitle, facts, source boundaries, current bridge, and writerContract from the new evidence. Do not repeat unsupported fields from the previous decision.",

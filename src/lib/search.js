@@ -2,7 +2,7 @@ const http = require("node:http");
 const https = require("node:https");
 
 const MAX_RESPONSE_CHARS = 1_500_000;
-const MAX_EXCERPT_CHARS = 1400;
+const MAX_EXCERPT_CHARS = 12000;
 const MAX_SELECTED_CONTENT_RESULTS = 20;
 const MAX_SEARCH_QUERY_VARIANTS = 4;
 const MAX_AUTHORITY_LINK_CANDIDATES = 6;
@@ -481,6 +481,11 @@ function extractReadableText(html) {
     .replace(/<svg[\s\S]*?<\/svg>/gi, " ")
     .replace(/<(header|footer|nav|aside)\b[\s\S]*?<\/\1>/gi, " ");
 
+  // Keep all sections of institutional pages, including later precautions.
+  const mainBody = withoutNoise.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i);
+  if (mainBody && stripTags(mainBody[1]).trim().length > 160) {
+    return stripTags(mainBody[1]).replace(/\s+/g, " ").trim();
+  }
   const preferredBlocks = [];
   const preferredRegex = /<(article|main|section|div|p)\b[^>]*(?:se-main-container|se_component_wrap|post_ct|post-view|article|content|entry|본문|view|post)[^>]*>([\s\S]*?)<\/\1>/gi;
   let block;
@@ -1188,6 +1193,7 @@ module.exports = {
   summarizeSourceQuality,
   _private: {
     naverSearchTemplateFor,
+    extractReadableText,
     buildQueryText,
     buildSearchProfile,
     scoreCandidate,
