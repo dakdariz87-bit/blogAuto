@@ -30,11 +30,22 @@ export function editorAction(mode, post) {
   }
   const diagnostic = { title: Boolean(title), body: Boolean(body), counts };
   if (!title || !body) return { found: false, diagnostic, reason: '제목·본문 영역을 정확히 찾지 못했습니다. 새 글 로딩과 도움말 창을 확인해주세요.' };
+  if (mode === 'alignment') {
+    const el=post?.field==='title'?title:body;
+    return {found:true,align:getComputedStyle(el).textAlign};
+  }
   if (mode === 'read') {
     return { found: true, title: text(title), body: text(body.closest('.se-component.se-text') || body) };
   }
-  if (mode === 'locate') {
-    const el = post?.field === 'title' ? title : body;
+  if (['locate','align-button','align-menu'].includes(mode)) {
+    let el;
+    if(mode==='align-button'){
+      const center=post?.align==='center';
+      el=pick(center?['.se-toolbar-option-align-center-button','button[title="가운데 정렬"]','button[aria-label="가운데 정렬"]','button[data-name="alignCenter"]']:['.se-toolbar-option-align-left-button','button[title="왼쪽 정렬"]','button[aria-label="왼쪽 정렬"]','button[data-name="alignLeft"]']);
+    }else if(mode==='align-menu'){
+      el=pick(['button[title="정렬"]','button[aria-label="정렬"]','button[data-name="align"]','.se-align-toolbar-button']);
+    }else el = post?.field === 'title' ? title : body;
+    if(!el)return {found:false};
     el.scrollIntoView({ block: 'center', inline: 'nearest' });
     const rect = el.getBoundingClientRect();
     let x = rect.left + Math.min(12, rect.width / 2);
