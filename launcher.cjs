@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.1.6';
+const LAUNCHER_VERSION='0.2.0';
 
 function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
   const env={...original};
@@ -95,14 +95,8 @@ function main(){
   // Preserve original settings and only point the CLI setting at the selected executable.
   const settings=require('./src/lib/settings');settings.ensureSettingsFile(folders.runtime);
   settings.writeSettings(folders.runtime,{codexCmdPath:path.extname(codexCmd).toLowerCase()==='.exe'?codexCmd:'codex.cmd'});
-  console.log('\n[3/4] Codex 로그인 상태 확인');
-  const authCommand=codexInvocation(codexCmd,['login','status']);
-  const auth=spawnSync(authCommand.file,authCommand.args,{cwd:root,env,stdio:'ignore',shell:false,timeout:20000});
-  if(auth.status!==0){
-    console.log('브라우저에서 본인 ChatGPT/Codex 계정으로 로그인해주세요. 로그인은 직접 완료해야 합니다.');
-    const login=codexInvocation(codexCmd,['login']);
-    checked(spawnSync(login.file,login.args,{cwd:root,env,stdio:'inherit',shell:false}),'Codex 로그인');
-  }else console.log('기존 Codex 로그인을 사용합니다.');
+  console.log('\n[3/4] 계정 연결 안내');
+  console.log('ChatGPT 연결은 앱 상단의 ChatGPT 연결 버튼에서 진행합니다.');
 
   console.log('\n[4/4] 원본 프로그램을 엽니다. 네이버 로그인은 프로그램의 세션 확인에서 진행하세요.');
   checked(spawnSync(electronExecutable,[root],{cwd:root,env,stdio:'inherit'}),'프로그램 실행');

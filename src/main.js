@@ -20,6 +20,16 @@ const {
   getAccountProfileDir
 } = require("./lib/accountStore");
 
+const { CodexConnection } = require('./lib/codexConnection');
+let codexConnection;
+function getCodexConnection() {
+  const command = resolveCodexCmdPath(readSettings(getRuntimeRoot()).codexCmdPath);
+  if (!codexConnection || codexConnection.command !== command) {
+    codexConnection?.close();
+    codexConnection = new CodexConnection(command, { cwd: getRuntimeRoot(), onLogin: status => emit('codex:loginComplete', status) });
+  }
+  return codexConnection;
+}
 let mainWindow;
 let activeJob = null;
 const activeNaverSessions = new Map();
@@ -1011,6 +1021,12 @@ async function startJob(form) {
   const settings = readSettings(runtimeRoot);
   ensureAccountStoreFile(runtimeRoot, settings);
 
+  const requestedModel = normalizeCodexModel(form.codexModel ?? settings.codexModel);
+  if (requestedModel) {
+    const models = await getCodexConnection().models();
+    if (!models.some(model => model.id === requestedModel)) throw new Error('선택한 모델을 현재 Codex 계정에서 확인하지 못했습니다. 모델 새로고침 후 사용 가능한 모델을 선택해주세요.');
+  }
+  if (activeJob) throw new Error('이미 실행 중인 작업이 있습니다.');
   const jobId = `job_${Date.now()}`;
   activeJob = { id: jobId, cancelled: false };
 
@@ -1020,7 +1036,7 @@ async function startJob(form) {
   const categoryKeyword = String(form.keyword || "").trim();
   const blogId = String(form.blogId || account.blogId || account.naverId || "").trim();
   const codexCmdPath = resolveCodexCmdPath(form.codexCmdPath || settings.codexCmdPath);
-  const codexModel = normalizeCodexModel(form.codexModel || settings.codexModel);
+  const codexModel = normalizeCodexModel(form.codexModel ?? settings.codexModel);
   const publishVisibility = String(form.publishVisibility || (form.publishPrivate === false ? "public" : "private"));
   const publishPrivate = publishVisibility !== "public";
   const publishScheduleMode = String(form.publishScheduleMode || "now");
@@ -1944,6 +1960,18 @@ app.whenReady().then(() => {
     const runtimeRoot = getRuntimeRoot();
     return writeSettings(runtimeRoot, settings);
   });
+  ipcMain.handle('codex:connectionStatus', () => getCodexConnection().status());
+  ipcMain.handle('codex:listModels', () => getCodexConnection().models());
+  ipcMain.handle('codex:connect', async () => {
+    if (activeJob) throw new Error('글 생성이 끝난 뒤 계정을 연결해주세요.');
+    const result = await getCodexConnection().login();
+    if (result.authUrl) {
+      try { await shell.openExternal(result.authUrl); }
+      catch { await getCodexConnection().cancelLogin(); throw new Error('브라우저를 열지 못했습니다. 다시 연결해주세요.'); }
+    }
+    return { waiting: true };
+  });
+  ipcMain.handle('codex:cancelLogin', () => getCodexConnection().cancelLogin());
   ipcMain.handle("codex:refreshUsage", async () => {
     const runtimeRoot = getRuntimeRoot();
     const settings = readSettings(runtimeRoot);
@@ -2246,6 +2274,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  codexConnection?.close();
   for (const session of activeNaverSessions.values()) {
     session.context?.close().catch(() => {});
   }

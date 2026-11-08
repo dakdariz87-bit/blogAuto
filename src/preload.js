@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("blogAuto", {
+  getCodexConnectionStatus: () => ipcRenderer.invoke('codex:connectionStatus'),
+  listCodexModels: () => ipcRenderer.invoke('codex:listModels'),
+  connectCodex: () => ipcRenderer.invoke('codex:connect'),
+  cancelCodexLogin: () => ipcRenderer.invoke('codex:cancelLogin'),
+  onCodexLoginComplete: handler => ipcRenderer.on('codex:loginComplete', (_event, status) => handler(status)),
   getInitialData: () => ipcRenderer.invoke("app:getInitialData"),
   openChromeInstallAndQuit: () => ipcRenderer.invoke("chrome:installAndQuit"),
   refreshCodexUsage: () => ipcRenderer.invoke("codex:refreshUsage"),

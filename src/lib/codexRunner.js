@@ -12,16 +12,6 @@ const DEFAULT_AGENT_MODELS = {
   imageStyle: "medium"
 };
 const VALID_AGENT_MODEL_EFFORTS = new Set(["low", "medium", "high", "xhigh"]);
-const CODEX_MODEL_IDS = new Set([
-  "",
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "gpt-5.6-luna",
-  "gpt-5.5",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5.3-codex"
-]);
 const DEFAULT_IMAGE_ASPECT_RATIO = "16:9";
 const IMAGE_ASPECT_RATIOS = new Set([DEFAULT_IMAGE_ASPECT_RATIO, "9:16", "1:1"]);
 const CODEX_USAGE_LIMIT_TYPES = new Set([
@@ -49,7 +39,7 @@ function modelEffortForAgent(options, agent) {
 
 function normalizeCodexModel(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return CODEX_MODEL_IDS.has(normalized) ? normalized : "";
+  return /^[a-z0-9][a-z0-9._:/-]{0,127}$/.test(normalized) ? normalized : "";
 }
 
 function normalizeImageAspectRatio(value) {

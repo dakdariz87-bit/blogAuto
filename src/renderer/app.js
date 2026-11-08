@@ -31,16 +31,6 @@ const DEFAULT_AGENT_MODELS = {
   writer: "high",
   image: "medium"
 };
-const CODEX_MODEL_IDS = new Set([
-  "",
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "gpt-5.6-luna",
-  "gpt-5.5",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5.3-codex"
-]);
 const AGENT_MODEL_SELECTORS = {
   main: "#mainAgentModel",
   research: "#researchAgentModel",
@@ -60,7 +50,7 @@ function normalizeImageAspectRatio(value) {
 
 function normalizeCodexModel(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  return CODEX_MODEL_IDS.has(normalized) ? normalized : "";
+  return /^[a-z0-9][a-z0-9._:/-]{0,127}$/.test(normalized) ? normalized : "";
 }
 
 function normalizeSearchProvider(value, fallback = "naver") {
@@ -354,7 +344,7 @@ function signalAutoSessionResume(accountId) {
 async function checkAccountSession(account, options = {}) {
   if (!account) return;
   const resumeAuto = options.resumeAuto !== false;
-  const startAuto = options.startAuto !== false;
+  const startAuto = options.startAuto === true;
   setRunState("generating", "로그인 완료 대기 중");
   addLog({
     level: "info",
@@ -724,6 +714,7 @@ function renderAccounts() {
   const manager = $("#accountManager");
   const toggle = $("#toggleAccountManagerButton");
   ensureSelectedAccount();
+  renderConnectionSummary();
   if (manager && toggle) {
     manager.classList.toggle("collapsed", !state.accountManagerOpen);
     toggle.textContent = state.accountManagerOpen ? "접기" : "펼치기";
@@ -754,7 +745,7 @@ function renderAccounts() {
       </div>
       <div class="account-actions">
         ${sessionBadge(account)}
-        <button type="button" class="ghost small" data-action="session">세션확인</button>
+        <button type="button" class="ghost small" data-action="session">네이버 연결 확인</button>
         <button type="button" class="select-button small" data-action="select">${account.id === state.accountStore.selectedAccountId ? "선택됨" : "선택"}</button>
         <button type="button" class="ghost small danger-button" data-action="delete">삭제</button>
       </div>
@@ -1225,7 +1216,7 @@ function applySettings(settings) {
   $("#titleImageAspectRatio").value = normalizeImageAspectRatio(settings.titleImageAspectRatio || settings.imageAspectRatio);
   $("#bodyImageAspectRatio").value = normalizeImageAspectRatio(settings.bodyImageAspectRatio || settings.imageAspectRatio);
   $("#breakSentencesInBody").checked = settings.breakSentencesInBody !== false;
-  if ($("#codexModel")) $("#codexModel").value = normalizeCodexModel(settings.codexModel);
+  if ($("#codexModel")) renderModelOptions([], normalizeCodexModel(settings.codexModel));
   applyAgentModels(settings.agentModels);
   if (settings.publishPrivate === false) $("#publishVisibility").value = "public";
   updateModeControls();
@@ -1645,6 +1636,136 @@ async function startTistoryTestPublish() {
   }
 }
 
+const MODEL_SUGGESTIONS = [
+  ['gpt-6-astra', 'GPT 6 Astra'], ['gpt-6.1-sol', 'GPT 6.1 Sol'], ['gpt-6.1-terra', 'GPT 6.1 Terra'],
+  ['gpt-6-sol', 'GPT 6 Sol'], ['gpt-6-luna', 'GPT 6 Luna'],
+  ['gpt-5.6-sol', 'GPT 5.6 Sol'], ['gpt-5.6-terra', 'GPT 5.6 Terra'], ['gpt-5.6-luna', 'GPT 5.6 Luna'],
+  ['gpt-5.5', 'GPT 5.5'], ['gpt-5.4', 'GPT 5.4'], ['gpt-5.4-mini', 'GPT 5.4 Mini'], ['gpt-5.3-codex', 'GPT 5.3 Codex']
+];
+let connectedCodex = false, currentCodexModels = [], connectionRefreshRunning = false;
+function renderModelOptions(models = currentCodexModels, selected = $('#codexModel').value) {
+  currentCodexModels = models;
+  const select = $('#codexModel'); select.replaceChildren(new Option('Codex 계정 기본 모델 (권장)', ''));
+  const available = document.createElement('optgroup'); available.label = '연결한 Codex에서 제공하는 모델';
+  for (const model of models) available.append(new Option(model.name + ' · ' + model.id, model.id));
+  if (models.length) select.append(available);
+  const pending = document.createElement('optgroup'); pending.label = '계정에서 미확인 · 선택 불가';
+  const suggestions = [...MODEL_SUGGESTIONS];
+  if (selected && !suggestions.some(([id]) => id === selected)) suggestions.push([selected, selected]);
+  for (const [id, name] of suggestions) if (!models.some(model => model.id === id)) {
+    const option = new Option(name + ' — 계정에서 미확인', id); option.disabled = true; pending.append(option);
+  }
+  if (pending.children.length) select.append(pending);
+  select.value = selected;
+  if (select.value !== selected) select.value = '';
+}
+function renderConnectionSummary() {
+  const account = selectedAccount();
+  const valid = account?.sessionStatus === 'valid';
+  $('#naverConnectionBadge').textContent = valid ? '연결됨' : account ? '로그인 확인 필요' : '블로그 등록 필요';
+  $('#naverConnectionBadge').className = 'badge ' + (valid ? 'success' : 'info');
+  if (account && document.activeElement !== $('#quickBlogAddress')) $('#quickBlogAddress').value = account.blogId || '';
+  $('#nextStepText').textContent = !connectedCodex ? 'ChatGPT 연결을 먼저 확인하세요.' : !account ? '네이버 블로그를 연결하세요.' : !(account.categories || []).length ? '첫 글 작성 설정하기에서 카테고리와 검색 키워드를 등록하세요.' : '주제를 입력하고 작업 시작을 눌러 초안을 만들 수 있습니다.';
+}
+async function refreshConnection() {
+  if (connectionRefreshRunning) return;
+  connectionRefreshRunning = true;
+  $('#refreshChatgptButton').disabled = true; $('#refreshModelsButton').disabled = true;
+  $('#chatgptConnectionText').textContent = '기존 Codex 연결을 확인하고 있습니다…';
+  try {
+    const status = await window.blogAuto.getCodexConnectionStatus();
+    connectedCodex = status.connected;
+    $('#chatgptConnectionBadge').textContent = status.connected ? '연결됨' : '연결 필요';
+    $('#chatgptConnectionBadge').className = 'badge ' + (status.connected ? 'success' : 'info');
+    $('#chatgptConnectionText').textContent = status.connected ? status.label + (status.plan ? ' · ' + status.plan : '') : 'ChatGPT 연결을 누르고 공식 로그인 화면에서 로그인하세요.';
+    $('#connectChatgptButton').textContent = status.connected ? '다른 ChatGPT 계정 연결' : 'ChatGPT 연결';
+    if (status.connected) {
+      $('#cancelChatgptButton').hidden = true;
+      try {
+        const models = await window.blogAuto.listCodexModels(); renderModelOptions(models);
+        const hasAstra = models.some(model => /astra/i.test(model.id + ' ' + model.name));
+        $('#modelConnectionHint').textContent = models.length + '개 모델 조회됨. ' + (hasAstra ? 'Astra를 선택할 수 있습니다.' : '현재 목록에서 Astra는 확인되지 않았습니다.');
+      } catch (error) { $('#modelConnectionHint').textContent = error.message; }
+    } else {
+      renderModelOptions([]); $('#modelConnectionHint').textContent = 'ChatGPT 연결 후 모델 목록을 조회하세요.';
+    }
+  } catch (error) {
+    connectedCodex = false; renderModelOptions([]);
+    $('#chatgptConnectionBadge').textContent = '연결 확인 실패';
+    $('#chatgptConnectionText').textContent = error.message;
+    $('#modelConnectionHint').textContent = '모델 목록을 확인하지 못했습니다. 바로실행.cmd로 다시 실행 후 연결 상태를 확인하세요.';
+  } finally {
+    $('#refreshChatgptButton').disabled = false; $('#refreshModelsButton').disabled = false;
+    connectionRefreshRunning = false; renderConnectionSummary();
+  }
+}
+function parseBlogAddress(value) {
+  const input = String(value || '').trim();
+  if (/^[a-zA-Z0-9_-]{2,64}$/.test(input)) return input;
+  let url;
+  try { url = new URL(/^[a-z]+:\/\//i.test(input) ? input : 'https://' + input); } catch { throw new Error('네이버 블로그 주소 또는 Blog ID를 입력하세요.'); }
+  if (!['blog.naver.com', 'm.blog.naver.com'].includes(url.hostname) || !['https:', 'http:'].includes(url.protocol)) throw new Error('blog.naver.com 형식의 네이버 블로그 주소를 입력하세요.');
+  const id = url.searchParams.get('blogId') || url.pathname.split('/').filter(Boolean)[0] || '';
+  if (!/^[a-zA-Z0-9_-]{2,64}$/.test(id)) throw new Error('주소에서 블로그 ID를 찾지 못했습니다. 예: https://blog.naver.com/dakdariz');
+  return id;
+}
+async function connectNaver() {
+  if (state.running || state.autoRunning) { $('#naverConnectionText').textContent = '진행 중인 작업이 끝난 뒤 연결해주세요.'; return; }
+  const button = $('#connectNaverButton'); button.disabled = true;
+  try {
+    const blogId = parseBlogAddress($('#quickBlogAddress').value);
+    let account = state.accountStore.accounts.find(item => String(item.blogId || '').toLowerCase() === blogId.toLowerCase());
+    if (!account) {
+      account = { id: makeId('acct'), label: blogId, blogId, checked: true, sessionStatus: 'unknown', categories: [] };
+      state.accountStore.accounts.push(account);
+    }
+    state.accountStore.selectedAccountId = account.id;
+    await saveAccountStoreNow(); fillAccountForm(account); renderAccounts();
+    $('#naverConnectionText').textContent = '열린 Chrome에서 로그인해주세요. 완료 여부를 확인하고 있습니다…';
+    await checkAccountSession(account, { startAuto: false, resumeAuto: false, includeTistorySession: false });
+    const current = selectedAccount();
+    $('#naverConnectionText').textContent = current?.sessionStatus === 'valid' ? blogId + ' 블로그 연결 완료. 이제 카테고리와 주제를 입력하세요.' : '연결을 확인하지 못했습니다. 열린 Chrome과 Main Agent 로그를 확인한 뒤 다시 연결해주세요.';
+  } catch (error) { $('#naverConnectionText').textContent = error.message; }
+  finally { button.disabled = false; renderConnectionSummary(); }
+}
+function initConnectionGuide() {
+  renderModelOptions(); renderConnectionSummary();
+  for (const id of ['openHelpButton', 'openGuideButton']) $('#' + id).addEventListener('click', () => $('#usageGuide').showModal());
+  $('#closeHelpButton').addEventListener('click', () => $('#usageGuide').close());
+  $('#refreshChatgptButton').addEventListener('click', refreshConnection);
+  $('#refreshModelsButton').addEventListener('click', refreshConnection);
+  $('#connectChatgptButton').addEventListener('click', async () => {
+    const button = $('#connectChatgptButton'); button.disabled = true;
+    try {
+      $('#chatgptConnectionText').textContent = '공식 로그인 화면을 여는 중입니다…';
+      await window.blogAuto.connectCodex();
+      $('#chatgptConnectionText').textContent = '브라우저에서 로그인 후 앱으로 돌아와 연결 상태 확인을 눌러주세요.';
+      $('#cancelChatgptButton').hidden = false;
+    } catch (error) { $('#chatgptConnectionText').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+  $('#cancelChatgptButton').addEventListener('click', async () => {
+    try { await window.blogAuto.cancelCodexLogin(); $('#cancelChatgptButton').hidden = true; await refreshConnection(); }
+    catch (error) { $('#chatgptConnectionText').textContent = error.message; }
+  });
+  window.blogAuto.onCodexLoginComplete(status => {
+    if (status.success) refreshConnection();
+    else { $('#chatgptConnectionText').textContent = '로그인이 완료되지 않았습니다. 다시 연결해주세요.'; $('#cancelChatgptButton').hidden = true; }
+  });
+  $('#connectNaverButton').addEventListener('click', connectNaver);
+  $('#prepareFirstDraftButton').addEventListener('click', async () => {
+    if (state.running || state.autoRunning) return;
+    if (!selectedAccount()) { $('#naverConnectionText').textContent = '먼저 위에 블로그 주소를 입력하고 네이버 연결을 눌러주세요.'; $('#quickBlogAddress').focus(); return; }
+    $('#topicMode').value = 'manual'; $('#publishAfterGenerate').checked = false;
+    $('#publishToTistoryAfterNaver').checked = false; $('#publishVisibility').value = 'private';
+    if (!$('#topic').value.trim()) $('#topic').value = '오래 앉아 있을 때 목과 어깨가 뻐근한 이유와 일상에서 점검할 습관';
+    state.categoryManagerOpen = true; renderCategories(); updateModeControls();
+    $('#categoryName').focus(); $('#categoryManager').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    try { await saveSettingsNow(); } catch (error) { $('#nextStepText').textContent = error.message; }
+  });
+  refreshConnection();
+}
+
 async function boot() {
   const initial = await window.blogAuto.getInitialData();
   $("#runtimePath").textContent = initial.runtimeRoot;
@@ -1652,8 +1773,9 @@ async function boot() {
   state.accountStore = initial.accountStore || state.accountStore;
   applySettings(initial.settings || {});
   setCodexRateLimits(initial.settings?.codexRateLimits || null);
-  refreshCodexUsageOnStartup();
+  // Account/model metadata is read without generating a paid test prompt.
   showStartupNoticeIfNeeded();
+  initConnectionGuide();
   renderAccounts();
   const account = selectedAccount();
   if (account) selectAccount(account.id);
