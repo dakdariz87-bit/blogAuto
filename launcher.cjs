@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.1.2';
+const LAUNCHER_VERSION='0.1.3';
 
 function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
   const env={...original};
@@ -20,15 +20,17 @@ function codexInvocation(command,args,nodeExecutable=process.execPath,exists=fs.
   if(!script)throw new Error('Codex 설치 파일을 확인하지 못했습니다. 설치 단계의 오류를 확인해주세요.');
   return {file:nodeExecutable,args:[script,...args]};
 }
-function ensureElectronInstalled(root,env,exists=fs.existsSync,runner=spawnSync){
-  const executable=path.join(root,'node_modules','electron','dist','electron.exe');
-  if(exists(executable))return executable;
-  const installer=path.join(root,'node_modules','electron','install.js');
-  if(!exists(installer))throw new Error('Electron 설치 파일이 없습니다. 패키지 설치를 확인해주세요.');
-  console.log('Electron 실행 파일을 설치합니다. 첫 다운로드에는 몇 분 걸릴 수 있습니다.');
-  const progressCode="const cp=require('node:child_process');const started=Date.now();const job=cp.spawn(process.execPath,[process.argv[1]],{stdio:'inherit',env:process.env});const progress=setInterval(()=>console.log('Electron download / extraction in progress: '+Math.round((Date.now()-started)/1000)+'s'),10000);job.on('error',e=>{clearInterval(progress);console.error(e.message);process.exitCode=1;});job.on('exit',code=>{clearInterval(progress);process.exitCode=code===0?0:1;});";
-  checked(runner(process.execPath,['-e',progressCode,installer],{cwd:path.dirname(installer),env,stdio:'inherit',shell:false}),'Electron 실행 파일 설치');
-  if(!exists(executable))throw new Error('Electron 실행 파일 설치를 확인하지 못했습니다. 다운로드 오류를 확인해주세요.');
+function ensureElectronInstalled(root,env,runner=spawnSync){
+  const packageDir=path.join(root,'node_modules','electron');
+  const setup=path.join(__dirname,'electron-setup.cjs');
+  if(!fs.existsSync(setup))throw new Error('v0.1.3의 electron-setup.cjs 파일도 기존 폴더에 함께 복사해주세요.');
+  const {electronReady}=require(setup);
+  const executable=path.join(packageDir,'dist','electron.exe');
+  if(electronReady(packageDir))return executable;
+  if(!fs.existsSync(path.join(packageDir,'package.json')))throw new Error('Electron 패키지가 없습니다. 설치 단계 오류를 확인해주세요.');
+  console.log('Electron의 공식 Windows 배포 파일을 직접 설치합니다. 첫 다운로드에는 몇 분 걸릴 수 있습니다.');
+  checked(runner(process.execPath,[setup,packageDir],{cwd:root,env,stdio:'inherit',shell:false}),'Electron 실행 파일 설치');
+  if(!electronReady(packageDir))throw new Error('Electron 실행 파일 검증에 실패했습니다. 위 설치 로그를 확인해주세요.');
   return executable;
 }
 

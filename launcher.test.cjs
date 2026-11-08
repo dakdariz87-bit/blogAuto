@@ -17,11 +17,13 @@ test('Codex .cmd를 실행하지 않고 확인된 node.exe와 codex.js를 직접
  assert.equal(result.file,'C:\\Node Folder\\node.exe');assert.deepEqual(result.args,[cli,'login','status']);
  assert.deepEqual(codexInvocation('C:\\codex.exe',['login']),{file:'C:\\codex.exe',args:['login']});
 });
-test('npm이 설치 스크립트를 생략했으면 Electron만 설치하고 실행 파일을 확인한다',()=>{
- let installed=false,calls=0;const root='/app';
-  const result=ensureElectronInstalled(root,{},file=>file.endsWith('install.js')||installed,(file,args,options)=>{calls++;assert.ok(args.at(-1).endsWith('electron/install.js'));assert.equal(args[0],'-e');assert.equal(options.shell,false);installed=true;return{status:0};});
- assert.ok(result.endsWith('electron.exe'));assert.equal(calls,1);
- ensureElectronInstalled(root,{},()=>true,()=>{throw new Error('재설치하면 안 됨');});
+test('Electron 설치 보조 파일을 직접 실행하고 결과 파일을 검증한다',()=>{
+ const fs=require('node:fs'),os=require('node:os');const root=fs.mkdtempSync(path.join(os.tmpdir(),'blog-electron-'));
+ const packageDir=path.join(root,'node_modules','electron');fs.mkdirSync(packageDir,{recursive:true});fs.writeFileSync(path.join(packageDir,'package.json'),JSON.stringify({version:'31.7.7'}));let calls=0;
+ try{
+ const result=ensureElectronInstalled(root,{},(file,args,options)=>{calls++;assert.ok(args[0].endsWith('electron-setup.cjs'));assert.equal(args[1],packageDir);assert.equal(options.shell,false);fs.mkdirSync(path.join(packageDir,'dist'));fs.writeFileSync(path.join(packageDir,'dist','electron.exe'),'MZtest');fs.writeFileSync(path.join(packageDir,'dist','version'),'31.7.7');fs.writeFileSync(path.join(packageDir,'path.txt'),'electron.exe');return{status:0};});
+ assert.ok(result.endsWith('electron.exe'));assert.equal(calls,1);ensureElectronInstalled(root,{},()=>{throw new Error('재설치하면 안 됨');});
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('다시 다운로드해도 같은 Windows 앱 데이터 위치를 사용한다',()=>{
  const folders=runtimePaths('C:/Users/test/AppData/Local');
