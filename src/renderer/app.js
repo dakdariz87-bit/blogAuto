@@ -1862,6 +1862,7 @@ async function boot() {
       $("#startButton").disabled = false;
       $("#stopAutoButton").disabled = true;
       setRunState("failed", "실패");
+      renderJobProgress({ percent: $('#jobProgressBar').value, stage: '중단 · ' + error.message, terminal: true });
       addLog({ level: "error", message: error.message, at: new Date().toISOString() });
     }
   });

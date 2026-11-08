@@ -17,7 +17,7 @@ class JobProgress {
     if (['success', 'generated'].includes(status)) { this.percent = 100; this.terminal = true; this.stage = status === 'generated' ? '초안 완성' : '발행 완료'; }
     else if (['failed', 'codex_exec_failed', 'codex_usage_limit', 'session_expired', 'duplicate_retry'].includes(status)) { this.terminal = true; this.stage = '중단 · ' + (detail || '진행 상황을 확인하세요'); }
     else if (!this.terminal && status === 'publishing') { this.percent = Math.max(this.percent, 92); this.stage = detail || '발행 중'; }
-    else if (!this.terminal && this.percent === 0 && status === 'generating') { this.percent = 3; this.stage = '작업 준비 중'; }
+    else if (!this.terminal && status === 'generating') { if (this.percent === 0) this.percent = 3; if (detail) this.stage = detail; }
     return this.snapshot();
   }
   snapshot() { return { percent: this.percent, stage: this.stage, terminal: this.terminal }; }

@@ -812,7 +812,7 @@ function createSessionExpiredError(reason = "네이버 세션이 만료되어 �
 async function verifyPublishSessionBeforeGeneration({ runtimeRoot, account, blogId, form, settings, jobId }) {
   const browserProfileDir = getAccountProfileDir(runtimeRoot, account);
   const sessionKey = sessionKeyFor(account, browserProfileDir);
-  updateStatus(jobId, "publishing", "Naver 글쓰기 편집기 확인");
+  updateStatus(jobId, "generating", "네이버 연결 사전 확인");
   safeLog(jobId, "본문 생성 전 Naver 계정 로그인 세션과 블로그 글쓰기 편집기 화면을 먼저 확인합니다.");
   safeLog(jobId, `계정 profile: ${browserProfileDir}`);
   const cached = reusableNaverSession(sessionKey);
@@ -859,7 +859,7 @@ async function verifyTistorySessionBeforeGeneration({ runtimeRoot, form, setting
   const tistoryBlogId = String(form.tistoryBlogId || settings.tistoryBlogId || "").trim();
   const browserProfileDir = getTistoryProfileDir(runtimeRoot, tistoryBlogId);
   const key = tistorySessionKey(tistoryBlogId, browserProfileDir);
-  updateStatus(jobId, "publishing", "티스토리 편집기 세션 확인");
+  updateStatus(jobId, "generating", "티스토리 연결 사전 확인");
   safeLog(jobId, `티스토리 프로필: ${browserProfileDir}`);
   try {
     const existingSession = reusableTistorySession(key);
