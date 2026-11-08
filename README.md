@@ -1,5 +1,11 @@
 # 자동화 블로그
 
+## 기존 크롬 로그인으로 실행 — 권장 테스트 방식
+
+[크롬 확장 프로그램 설치 안내](chrome-extension/README.md)를 따라 chrome://extensions 에서 chrome-extension 폴더를 로드합니다. 평소 크롬에서 로그인한 dakdariz 새 글을 연 뒤 확장 프로그램에서 초안을 검토하고 입력합니다. Node.js나 별도 브라우저가 필요 없습니다. 사진 첨부와 최종 발행은 직접 진행합니다. 실제 네이버 동작은 PC에서 검증해야 합니다.
+
+상위 요소에서 편집 권한을 받는 입력 칸, 안내 문구, 여러 줄 입력, 중복 입력 및 이미지가 있는 글에서의 차단을 로컬 Chromium으로 검증했습니다.
+
 테스트 블로그: [dakdariz](https://blog.naver.com/dakdariz)
 
 ## Windows PC에서 테스트
