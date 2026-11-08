@@ -2,7 +2,35 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.1.1';
+const LAUNCHER_VERSION='0.1.2';
+
+function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
+  const env={...original};
+  const keys=Object.keys(env).filter(key=>key.toLowerCase()==='path');
+  const originalPath=env[keys.find(key=>key==='Path') || keys[0]] || '';
+  for(const key of keys)delete env[key];
+  env.Path=[pathApi.dirname(nodeExecutable),...extraDirs,originalPath].filter(Boolean).join(pathApi.delimiter);
+  return env;
+}
+function codexInvocation(command,args,nodeExecutable=process.execPath,exists=fs.existsSync,pathApi=path){
+  if(/\.exe$/i.test(command))return {file:command,args};
+  const dir=pathApi.dirname(command);
+  const candidates=[pathApi.join(dir,'node_modules','@openai','codex','bin','codex.js'),pathApi.join(dir,'..','@openai','codex','bin','codex.js')];
+  const script=candidates.find(exists);
+  if(!script)throw new Error('Codex 설치 파일을 확인하지 못했습니다. 설치 단계의 오류를 확인해주세요.');
+  return {file:nodeExecutable,args:[script,...args]};
+}
+function ensureElectronInstalled(root,env,exists=fs.existsSync,runner=spawnSync){
+  const executable=path.join(root,'node_modules','electron','dist','electron.exe');
+  if(exists(executable))return executable;
+  const installer=path.join(root,'node_modules','electron','install.js');
+  if(!exists(installer))throw new Error('Electron 설치 파일이 없습니다. 패키지 설치를 확인해주세요.');
+  console.log('Electron 실행 파일을 설치합니다. 첫 다운로드에는 몇 분 걸릴 수 있습니다.');
+  const progressCode="const cp=require('node:child_process');const started=Date.now();const job=cp.spawn(process.execPath,[process.argv[1]],{stdio:'inherit',env:process.env});const progress=setInterval(()=>console.log('Electron download / extraction in progress: '+Math.round((Date.now()-started)/1000)+'s'),10000);job.on('error',e=>{clearInterval(progress);console.error(e.message);process.exitCode=1;});job.on('exit',code=>{clearInterval(progress);process.exitCode=code===0?0:1;});";
+  checked(runner(process.execPath,['-e',progressCode,installer],{cwd:path.dirname(installer),env,stdio:'inherit',shell:false}),'Electron 실행 파일 설치');
+  if(!exists(executable))throw new Error('Electron 실행 파일 설치를 확인하지 못했습니다. 다운로드 오류를 확인해주세요.');
+  return executable;
+}
 
 function resolveNpmCli(nodeExecutable,wrappers=[],exists=fs.existsSync,pathApi=path){
   const dirs=[pathApi.dirname(nodeExecutable),...wrappers.map(file=>pathApi.dirname(file))];
@@ -18,7 +46,7 @@ function invokeNpm(npmCli,args,options={},runner=spawnSync){
 }
 
 function installNeeded(root,exists=fs.existsSync){
-  return !exists(path.join(root,'node_modules','electron','dist','electron.exe')) ||
+  return !exists(path.join(root,'node_modules','electron','install.js')) ||
     !exists(path.join(root,'node_modules','playwright-core','package.json'));
 }
 function runtimePaths(localAppData){
@@ -39,16 +67,16 @@ function main(){
   if(!fs.existsSync(path.join(root,'package.json')))throw new Error('ZIP 압축을 모두 풀고 바로실행.cmd를 실행해주세요.');
   const folders=runtimePaths(process.env.LOCALAPPDATA);
   fs.mkdirSync(folders.runtime,{recursive:true});fs.mkdirSync(folders.tools,{recursive:true});
-  const env={...process.env,BLOGAUTO_RUNTIME_ROOT:folders.runtime,BLOGAUTO_CODEX_TOOLS:folders.tools,npm_config_cache:folders.cache};
+  let env=windowsEnvironment({...process.env,BLOGAUTO_RUNTIME_ROOT:folders.runtime,BLOGAUTO_CODEX_TOOLS:folders.tools,npm_config_cache:folders.cache},process.execPath);
   const npmFound=spawnSync('where.exe',['npm.cmd'],{env,encoding:'utf8'});
   const npmCli=resolveNpmCli(process.execPath,npmFound.status===0?npmFound.stdout.trim().split(/\r?\n/):[]);
   const npm=args=>invokeNpm(npmCli,args,{cwd:root,env,stdio:'inherit'});
-  const run=command=>spawnSync(process.env.ComSpec || 'cmd.exe',['/d','/s','/c',command],{cwd:root,env,stdio:'inherit',windowsVerbatimArguments:true});
   console.log('\n[1/4] 프로그램 설치 상태 확인');
   if(installNeeded(root)){
     console.log('처음 실행에는 필요한 패키지와 앱을 내려받습니다. 몇 분 걸릴 수 있습니다. 진행 중에는 이 창을 닫지 마세요.');
     checked(npm(['ci','--no-audit','--no-fund']),'프로그램 패키지 설치');
   }else console.log('설치된 프로그램을 사용합니다.');
+  const electronExecutable=ensureElectronInstalled(root,env);
 
   console.log('\n[2/4] Codex CLI 확인');
   const localBin=path.join(folders.tools,'node_modules','.bin');
@@ -61,21 +89,21 @@ function main(){
     checked(npm(['install','--prefix',folders.tools,'--no-audit','--no-fund','@openai/codex']),'Codex CLI 설치');
   }
   if(!codexCmd)codexCmd=path.join(localBin,'codex.cmd');
-  env.PATH=path.dirname(codexCmd)+path.delimiter+localBin+path.delimiter+(env.PATH || '');
+  env=windowsEnvironment(env,process.execPath,[path.dirname(codexCmd),localBin]);
   // Preserve original settings and only point the CLI setting at the selected executable.
   const settings=require('./src/lib/settings');settings.ensureSettingsFile(folders.runtime);
   settings.writeSettings(folders.runtime,{codexCmdPath:path.extname(codexCmd).toLowerCase()==='.exe'?codexCmd:'codex.cmd'});
-  // Pass the executable in an environment variable so user-directory characters are not shell code.
-  env.BLOGAUTO_CODEX_EXECUTABLE=codexCmd;
   console.log('\n[3/4] Codex 로그인 상태 확인');
-  const auth=run('call "%BLOGAUTO_CODEX_EXECUTABLE%" login status >nul 2>nul');
+  const authCommand=codexInvocation(codexCmd,['login','status']);
+  const auth=spawnSync(authCommand.file,authCommand.args,{cwd:root,env,stdio:'ignore',shell:false});
   if(auth.status!==0){
     console.log('브라우저에서 본인 ChatGPT/Codex 계정으로 로그인해주세요. 로그인은 직접 완료해야 합니다.');
-    checked(run('call "%BLOGAUTO_CODEX_EXECUTABLE%" login'),'Codex 로그인');
+    const login=codexInvocation(codexCmd,['login']);
+    checked(spawnSync(login.file,login.args,{cwd:root,env,stdio:'inherit',shell:false}),'Codex 로그인');
   }else console.log('기존 Codex 로그인을 사용합니다.');
 
   console.log('\n[4/4] 원본 프로그램을 엽니다. 네이버 로그인은 프로그램의 세션 확인에서 진행하세요.');
-  checked(spawnSync(path.join(root,'node_modules','electron','dist','electron.exe'),[root],{cwd:root,env,stdio:'inherit'}),'프로그램 실행');
+  checked(spawnSync(electronExecutable,[root],{cwd:root,env,stdio:'inherit'}),'프로그램 실행');
 }
-module.exports={installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm};
+module.exports={installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm,windowsEnvironment,codexInvocation,ensureElectronInstalled};
 if(require.main===module){try{main();}catch(error){console.error('\n실행을 완료하지 못했습니다: '+error.message);process.exitCode=1;}}

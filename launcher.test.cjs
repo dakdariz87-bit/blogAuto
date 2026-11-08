@@ -1,9 +1,27 @@
 const test=require('node:test');const assert=require('node:assert/strict');const path=require('node:path');
-const {installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm}=require('./launcher.cjs');
+const {installNeeded,runtimePaths,checked,resolveNpmCli,invokeNpm,windowsEnvironment,codexInvocation,ensureElectronInstalled}=require('./launcher.cjs');
 test('앱 또는 브라우저 라이브러리가 없을 때만 설치한다',()=>{
  assert.equal(installNeeded('/app',()=>true),false);
- assert.equal(installNeeded('/app',file=>!file.endsWith('electron.exe')),true);
+ assert.equal(installNeeded('/app',file=>!file.endsWith('install.js')),true);
  assert.equal(installNeeded('/app',file=>!file.includes('playwright-core')),true);
+});
+test('Windows Path/PATH 중복을 없애고 현재 node.exe와 시스템 경로를 보존한다',()=>{
+ const result=windowsEnvironment({Path:'C:\\Windows\\System32;C:\\Existing',TEMP:'tmp'},'C:\\Program Files\\nodejs\\node.exe',['C:\\Codex']);
+ assert.equal(Object.keys(result).filter(key=>key.toLowerCase()==='path').length,1);
+ assert.equal(result.Path,'C:\\Program Files\\nodejs;C:\\Codex;C:\\Windows\\System32;C:\\Existing');
+ assert.equal(result.TEMP,'tmp');
+});
+test('Codex .cmd를 실행하지 않고 확인된 node.exe와 codex.js를 직접 실행한다',()=>{
+ const cli='C:\\Tools\\node_modules\\@openai\\codex\\bin\\codex.js';
+ const result=codexInvocation('C:\\Tools\\node_modules\\.bin\\codex.cmd',['login','status'],'C:\\Node Folder\\node.exe',file=>file===cli,path.win32);
+ assert.equal(result.file,'C:\\Node Folder\\node.exe');assert.deepEqual(result.args,[cli,'login','status']);
+ assert.deepEqual(codexInvocation('C:\\codex.exe',['login']),{file:'C:\\codex.exe',args:['login']});
+});
+test('npm이 설치 스크립트를 생략했으면 Electron만 설치하고 실행 파일을 확인한다',()=>{
+ let installed=false,calls=0;const root='/app';
+  const result=ensureElectronInstalled(root,{},file=>file.endsWith('install.js')||installed,(file,args,options)=>{calls++;assert.ok(args.at(-1).endsWith('electron/install.js'));assert.equal(args[0],'-e');assert.equal(options.shell,false);installed=true;return{status:0};});
+ assert.ok(result.endsWith('electron.exe'));assert.equal(calls,1);
+ ensureElectronInstalled(root,{},()=>true,()=>{throw new Error('재설치하면 안 됨');});
 });
 test('다시 다운로드해도 같은 Windows 앱 데이터 위치를 사용한다',()=>{
  const folders=runtimePaths('C:/Users/test/AppData/Local');
