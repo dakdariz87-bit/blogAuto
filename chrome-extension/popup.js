@@ -34,6 +34,26 @@ function changed(){renderPreview();update();if(loaded)saveSoon();}
 for(const el of [title,body,$('#align')])el.addEventListener('input',changed);
 confirm.addEventListener('input',update);
 $('#suggest').addEventListener('click',()=>{slots=imageSuggestions(body.value);renderSlots();changed();});
+$('#open-blog').addEventListener('click',async()=>{
+  try{
+    let target;
+    try{
+      const current=await chrome.tabs.get(activeTab.id),url=new URL(current.url);
+      if(url.hostname==='blog.naver.com' && /PostWriteForm[.]naver$/.test(url.pathname) && url.searchParams.get('blogId')==='dakdariz')target=current;
+    }catch{}
+    if(!target){
+      const windows=await chrome.windows.getAll({windowTypes:['normal']});
+      const browser=windows.find(item=>item.id===activeTab?.windowId) || windows[0];
+      if(!browser)throw new Error('일반 크롬 창을 하나 열고 다시 눌러주세요.');
+      target=await chrome.tabs.create({windowId:browser.id,url:'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz',active:false});
+    }
+    activeTab=target;
+    await chrome.storage.local.set({[stateKey()]:{title:title.value,body:body.value,align:$('#align').value,slots}});
+    await chrome.tabs.update(target.id,{active:true});
+    await chrome.windows.update(target.windowId,{focused:true});
+    status.textContent='네이버 글쓰기 탭을 열었습니다. 편집기로 돌아와 초안을 입력하세요.';
+  }catch(error){status.textContent=error.message;}
+});
 $('#large').addEventListener('click',async()=>{
   if(!activeTab)return;
   await chrome.storage.local.set({[stateKey()]:{title:title.value,body:body.value,align:$('#align').value,slots}});
@@ -48,8 +68,8 @@ try{
   title.value=saved.title ?? draft.title; body.value=saved.body ?? draft.body;
   $('#align').value=saved.align || 'center';
   slots=saved.slots || imageSuggestions(body.value);
-  status.textContent=state[key] || '버전 0.4.0 · 가운데 정렬과 줄바꿈을 적용합니다. 이미지 위치는 원하는 항목을 체크하세요.';
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes[key])status.textContent=changes[key].newValue;});
+  status.textContent=state[key] || '버전 0.4.1 · 가운데 정렬과 줄바꿈을 적용합니다. 이미지 위치는 원하는 항목을 체크하세요.';
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes['status-'+activeTab.id])status.textContent=changes['status-'+activeTab.id].newValue;});
   loaded=true;renderSlots();changed();
 }catch(error){status.textContent=error.message;}
 button.addEventListener('click',async()=>{
