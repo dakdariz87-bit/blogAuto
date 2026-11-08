@@ -27,11 +27,11 @@ test('큰 창과 이미지 위치 미리보기·원래 네이버 탭 연결을 �
   try{
     const page=await browser.newPage();
     await page.addInitScript(()=>{
-      window.testMessages=[];window.testWindows=[];
-      chrome.tabs={get:async id=>({id,url:'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}),query:async()=>[{id:7,url:'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}]};
+      window.testMessages=[];window.testWindows=[];window.testTabs=[];
+      chrome.tabs={get:async id=>({id,windowId:3,url:id===9?'https://example.com/':'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}),query:async()=>[{id:7,windowId:3,url:'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}],create:async options=>{window.testTabs.push(options);return {id:10,windowId:3,url:options.url};},update:async(id,options)=>{window.focusedTab=id;}};
       chrome.storage={local:{get:async()=>({}),set:async()=>{}},onChanged:{addListener:()=>{}}};
       chrome.runtime={getURL:p=>'http://extension.test/'+p,sendMessage:async m=>{window.testMessages.push(m);return {accepted:true};}};
-      chrome.windows={create:async v=>window.testWindows.push(v)};
+      chrome.windows={create:async v=>window.testWindows.push(v),getAll:async()=>[{id:3}],update:async()=>{}};
     });
     await page.route('http://extension.test/**',async route=>{
       const name=new URL(route.request().url()).pathname.slice(1);
@@ -43,11 +43,22 @@ test('큰 창과 이미지 위치 미리보기·원래 네이버 탭 연결을 �
     await page.waitForFunction(()=>document.querySelector('#title').value.length>0);
     assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('large')),true);
     assert.equal(await page.locator('#large').isVisible(),false);
+    await page.locator('#open-blog').click();
+    await page.waitForFunction(()=>window.focusedTab===7);
+    assert.equal((await page.evaluate(()=>window.testTabs)).length,0);
     await page.locator('#slots input[type=checkbox]').first().check();
     assert.equal(await page.locator('#preview .image-marker').count(),1);
     await page.locator('#confirm').check();await page.locator('#insert').click();
     await page.waitForFunction(()=>window.testMessages.length===1);
     const [message]=await page.evaluate(()=>window.testMessages);
     assert.equal(message.tabId,7);assert.equal(message.post.align,'center');assert.match(message.post.body,/【이미지/);assert.match(message.post.body,/\n\n/);
+    await page.goto('http://extension.test/popup.html?tabId=9');
+    await page.waitForFunction(()=>document.querySelector('#title').value.length>0);
+    await page.locator('#open-blog').click();
+    await page.waitForFunction(()=>window.focusedTab===10);
+    assert.equal((await page.evaluate(()=>window.testTabs))[0].windowId,3);
+    await page.locator('#confirm').check();await page.locator('#insert').click();
+    await page.waitForFunction(()=>window.testMessages.length===1);
+    assert.equal((await page.evaluate(()=>window.testMessages))[0].tabId,10);
   }finally{await browser.close();}
 });
