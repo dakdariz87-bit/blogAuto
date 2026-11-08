@@ -29,7 +29,7 @@ test('큰 창과 이미지 위치 미리보기·원래 네이버 탭 연결을 �
     await page.addInitScript(()=>{
       window.testMessages=[];window.testWindows=[];window.testTabs=[];
       chrome.tabs={get:async id=>({id,windowId:3,url:id===9?'https://example.com/':'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}),query:async()=>[{id:7,windowId:3,url:'https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz'}],create:async options=>{window.testTabs.push(options);return {id:10,windowId:3,url:options.url};},update:async(id,options)=>{window.focusedTab=id;}};
-      chrome.storage={local:{get:async()=>({}),set:async()=>{}},onChanged:{addListener:()=>{}}};
+      chrome.storage={local:{get:async()=>({}),set:async()=>{}},session:{get:async()=>({}),set:async()=>{}},onChanged:{addListener:()=>{}}};
       chrome.runtime={getURL:p=>'http://extension.test/'+p,sendMessage:async m=>{window.testMessages.push(m);return {accepted:true};}};
       chrome.windows={create:async v=>window.testWindows.push(v),getAll:async()=>[{id:3}],update:async()=>{}};
     });

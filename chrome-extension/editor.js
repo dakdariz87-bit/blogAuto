@@ -16,7 +16,7 @@ export function editorAction(mode, post) {
     return null;
   };
   const title = pick(['.se-documentTitle .se-text-paragraph', '.se-section-documentTitle .se-text-paragraph', '.se-documentTitle [contenteditable="true"]']);
-  const body = pick([
+  let body = pick([
     '.se-main-container .se-component.se-text .se-text-paragraph',
     '.se-content .se-component.se-text .se-text-paragraph',
     '.se-component.se-text .se-text-paragraph',
@@ -29,17 +29,41 @@ export function editorAction(mode, post) {
     counts[selector] = [...document.querySelectorAll(selector)].filter(visible).length;
   }
   const diagnostic = { title: Boolean(title), body: Boolean(body), counts };
+  if(!body && ['read','metrics','tool','style'].includes(mode))body=[...document.querySelectorAll('.se-component.se-text')].find(visible);
+  if(mode==='metrics'){
+    const images=[...document.querySelectorAll('.se-component.se-image')];
+    return {images:images.length,loadedImages:images.filter(el=>[...el.querySelectorAll('img')].some(img=>img.complete&&img.naturalWidth>0)).length,stickers:document.querySelectorAll('.se-component.se-sticker').length};
+  }
+  if(mode==='style'){
+    const paragraphs=[...document.querySelectorAll('.se-component.se-text .se-text-paragraph')].filter(visible);
+    const el=paragraphs.at(-1)?.querySelector('span:last-child') || paragraphs.at(-1);
+    const style=el?getComputedStyle(el):null;
+    return style?{fontSize:style.fontSize,color:style.color,fontWeight:style.fontWeight,background:style.backgroundColor}:null;
+  }
   if (!title || !body) return { found: false, diagnostic, reason: '제목·본문 영역을 정확히 찾지 못했습니다. 새 글 로딩과 도움말 창을 확인해주세요.' };
   if (mode === 'alignment') {
     const el=post?.field==='title'?title:body;
     return {found:true,align:getComputedStyle(el).textAlign};
   }
   if (mode === 'read') {
-    return { found: true, title: text(title), body: text(body.closest('.se-component.se-text') || body) };
+    return { found: true, title: text(title), body: [...document.querySelectorAll('.se-component.se-text')].map(text).join('\n\n') };
   }
-  if (['locate','align-button','align-menu'].includes(mode)) {
+  if (['locate','align-button','align-menu','tool'].includes(mode)) {
     let el;
-    if(mode==='align-button'){
+    if(mode==='tool'){
+      const controls={
+        'size-menu':['.se-font-size-code-toolbar-button','button[data-name="font-size"]','button[title="글자 크기"]','button[aria-label="글자 크기"]'],
+        'color-menu':['.se-font-color-toolbar-button','button[data-name="font-color"]','button[title="글자색"]','button[aria-label="글자 색"]'],
+        'highlight-menu':['.se-background-color-toolbar-button','button[data-name="background-color"]','button[title="배경색"]'],
+        'sticker':['.se-sticker-toolbar-button','button[data-name="sticker"]','button[title="스티커"]','button[aria-label="스티커"]']
+      };
+      if(post?.name==='size-value' && /^[0-9]{1,2}$/.test(String(post.value))){
+        el=pick(['button[data-value="'+post.value+'"]','[role="option"][data-value="'+post.value+'"]']);
+        if(!el)el=[...document.querySelectorAll('button,[role="option"]')].filter(visible).find(item=>[String(post.value),String(post.value)+'px'].includes(item.textContent.trim()));
+      }else if(post?.name==='color-value' && /^#[0-9a-f]{6}$/i.test(post.value || '')){
+        el=pick(['button[data-color="'+post.value+'"]','button[data-value="'+post.value+'"]','[role="button"][data-color="'+post.value+'"]']);
+      }else el=pick(controls[post?.name] || []);
+    }else if(mode==='align-button'){
       const center=post?.align==='center';
       el=pick(center?['.se-toolbar-option-align-center-button','button[title="가운데 정렬"]','button[aria-label="가운데 정렬"]','button[data-name="alignCenter"]']:['.se-toolbar-option-align-left-button','button[title="왼쪽 정렬"]','button[aria-label="왼쪽 정렬"]','button[data-name="alignLeft"]']);
     }else if(mode==='align-menu'){
