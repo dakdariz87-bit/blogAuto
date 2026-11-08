@@ -35,14 +35,21 @@ async function download(config){
   }finally{clearInterval(interval);await fsp.rm(temporary,{force:true}).catch(()=>{});}
 }
 async function extract(config){
-  send({type:'phase',phase:'설치 전 체크섬 재검증'});
   if(await hash(config.zip,'설치 전 체크섬 재검증')!==config.checksum)throw new Error('압축 파일 체크섬 확인에 실패했습니다.');
-  const scopedRequire=createRequire(path.join(config.packageDir,'package.json')),unzip=scopedRequire('extract-zip');
+  const scopedRequire=createRequire(path.join(config.packageDir,'package.json')),yauzl=scopedRequire('yauzl');
   const stage=path.join(config.packageDir,'.blogauto-stage-'+process.pid),dist=path.join(config.packageDir,'dist'),backup=dist+'.blogauto-backup-'+process.pid,pathFile=path.join(config.packageDir,'path.txt');let moved=false,oldPath;
   await fsp.mkdir(stage,{recursive:true});
   try{
-    send({type:'phase',phase:'압축 해제'});let count=0;
-    await unzip(config.zip,{dir:stage,onEntry:()=>send({type:'progress',phase:'압축 해제',completed:++count,unit:'files'})});
+    send({type:'phase',phase:'압축 해제'});let lastReport=0,lastFile='';
+    const {extractZip}=require('./extract-stream.cjs');
+    const extracted=await extractZip({zip:config.zip,directory:stage,yauzl,onProgress:event=>{
+      if(event.type==='entry'){
+        lastFile=event.file;send({type:'detail',phase:'압축 해제',file:lastFile,completed:event.bytes});
+      }else if(Date.now()-lastReport>=300){
+        lastReport=Date.now();send({type:'progress',phase:'압축 해제',completed:event.bytes,file:lastFile});
+      }
+    }});
+    send({type:'progress',phase:'압축 해제',completed:extracted.bytes,file:lastFile,done:true});
     const executable=path.join(stage,'electron.exe'),fd=await fsp.open(executable,'r'),header=Buffer.alloc(2);try{await fd.read(header,0,2,0);}finally{await fd.close();}
     if(header.toString()!=='MZ')throw new Error('Windows 실행 파일이 아닙니다.');
     if((await fsp.readFile(path.join(stage,'version'),'utf8')).trim().replace(/^v/,'')!==config.version)throw new Error('실행 파일 버전이 원본과 다릅니다.');
@@ -50,7 +57,7 @@ async function extract(config){
     try{await fsp.stat(dist);await fsp.rename(dist,backup);moved=true;}catch(error){if(error.code!=='ENOENT')throw error;}
     try{await fsp.rename(stage,dist);await fsp.writeFile(pathFile,'electron.exe');}
     catch(error){await fsp.rm(dist,{recursive:true,force:true});if(moved)await fsp.rename(backup,dist);if(oldPath)await fsp.writeFile(pathFile,oldPath);throw error;}
-    await fsp.rm(backup,{recursive:true,force:true});return {executable:path.join(dist,'electron.exe'),files:count};
+    await fsp.rm(backup,{recursive:true,force:true});return {executable:path.join(dist,'electron.exe'),files:extracted.files};
   }finally{await fsp.rm(stage,{recursive:true,force:true});}
 }
 module.exports={download,extract,hash};

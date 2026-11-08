@@ -13,8 +13,9 @@ function progressPrinter(){
   let last=0,previousPhase='';
   return message=>{
     if(message.type==='phase'){console.log('  '+message.phase+'…');previousPhase=message.phase;last=0;}
-    if(message.type==='progress' && (Date.now()-last>=1500 || previousPhase!==message.phase)){
-      console.log('  '+message.phase+': '+(message.unit==='files'?message.completed+'개 항목':(message.completed/1048576).toFixed(1)+' MB'));
+    if(message.type==='detail' && (Date.now()-last>=1500 || /electron\.exe$/i.test(message.file || ''))){console.log('  압축 해제 파일: '+message.file);last=Date.now();}
+    if(message.type==='progress' && (message.done || Date.now()-last>=1500 || previousPhase!==message.phase)){
+      console.log('  '+message.phase+': '+(message.unit==='files'?message.completed+'개 항목':(message.completed/1048576).toFixed(1)+' MB')+(message.file?' — '+message.file:''));
       last=Date.now();previousPhase=message.phase;
     }
   };
@@ -34,8 +35,8 @@ async function installElectron({packageDir,arch=process.arch,cacheRoot,workerFil
     catch(error){lastError=error;console.error(source.name+' 실패: '+error.message);}
   }
   if(!zip)throw new Error('모든 다운로드 경로가 실패했습니다. '+(lastError?.message || ''));
-  console.log('다운로드 검증 완료. 압축을 해제하고 설치합니다.');
-  await supervise({mode:'extract',packageDir,zip,checksum,version},{...options,idleMs:Math.max(idleMs,60000),totalMs:180000});
+  console.log('다운로드 검증 완료. 압축을 해제하고 설치합니다. (실제 기록 바이트 감시 / 무진행 120초 제한)');
+  await supervise({mode:'extract',packageDir,zip,checksum,version},{...options,idleMs:Math.max(idleMs,120000),totalMs:600000});
   if(!electronReady(packageDir))throw new Error('설치 후 실행 파일 검증 실패');
   console.log('Electron 실행 파일·체크섬·버전·경로 검증 완료.');return path.join(packageDir,'dist','electron.exe');
 }

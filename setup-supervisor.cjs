@@ -13,9 +13,9 @@ function supervise(config,{workerFile=path.join(__dirname,'electron-worker.cjs')
   return new Promise((resolve,reject)=>{
     const child=fork(workerFile,[],{env,stdio:['ignore','pipe','pipe','ipc'],windowsHide:true,detached:process.platform!=='win32'});
     const parentExit=()=>{try{child.disconnect();}catch{}};process.once('exit',parentExit);
-    let idle,ending=false,result,diagnostic='',phase='작업 시작';const progress=new Map();const seenPhases=new Set();
+    let idle,ending=false,result,diagnostic='',phase='작업 시작',currentFile='',lastBytes=0;const progress=new Map();const seenPhases=new Set();
     const finish=async(error,value)=>{if(ending)return;ending=true;process.removeListener('exit',parentExit);clearTimeout(idle);clearTimeout(deadline);if(error){await terminateTree(child);reject(error);}else resolve(value);};
-    const resetIdle=()=>{clearTimeout(idle);idle=setTimeout(()=>finish(Object.assign(new Error(phase+' 단계에서 '+Math.round(idleMs/1000)+'초 동안 실제 진행이 없어 작업을 종료했습니다.'),{code:'SETUP_IDLE_TIMEOUT'})),idleMs);};
+    const resetIdle=()=>{clearTimeout(idle);idle=setTimeout(()=>finish(Object.assign(new Error(phase+(currentFile?' ['+currentFile+', '+(lastBytes/1048576).toFixed(1)+' MB]':'')+' 단계에서 '+Math.round(idleMs/1000)+'초 동안 실제 진행이 없어 작업을 종료했습니다.'),{code:'SETUP_IDLE_TIMEOUT'})),idleMs);};
     const deadline=setTimeout(()=>finish(Object.assign(new Error(phase+' 단계의 전체 제한 시간을 초과해 작업을 종료했습니다.'),{code:'SETUP_TOTAL_TIMEOUT'})),totalMs);
     resetIdle();
     const remember=data=>{diagnostic=(diagnostic+data.toString()).slice(-4000);};child.stdout.on('data',remember);child.stderr.on('data',remember);
@@ -29,6 +29,7 @@ function supervise(config,{workerFile=path.join(__dirname,'electron-worker.cjs')
         const previous=progress.get(message.phase)||0;
         if(message.completed>previous){progress.set(message.phase,message.completed);phase=message.phase;resetIdle();}
       }
+      if(message.file)currentFile=String(message.file);if(message.type==='progress')lastBytes=message.completed;
       if(message.type==='result')result=message.value;
       if(message.type==='failure')diagnostic=String(message.message || '작업 실패');
       try{onEvent(message);}catch(error){finish(error);}
