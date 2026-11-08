@@ -3,6 +3,8 @@ const path = require("node:path");
 const os = require("node:os");
 const { spawn } = require("node:child_process");
 const { normalizeMaxBodyImages } = require("./settings");
+const { collectResult, resultTransportPrompt } = require("./taskResult");
+const { invocation } = require("./codexConnection");
 
 const DEFAULT_AGENT_MODELS = {
   main: "high",
@@ -466,8 +468,9 @@ function extractAssistantOutputTexts(event) {
   if (item?.type === "message" && item?.role === "assistant") {
     pushAssistantContentText(item.content, texts);
   }
-  if (item?.type === "agent_message" && typeof item.message === "string") {
-    texts.push(item.message);
+  if (item?.type === "agent_message") {
+    if (typeof item.text === "string") texts.push(item.text);
+    else if (typeof item.message === "string") texts.push(item.message);
   }
   if (payload.type === "agent_message_delta" && typeof payload.delta === "string") {
     texts.push(payload.delta);
@@ -2005,6 +2008,10 @@ async function runCodexTask({
   agentTokenOffset = 0,
   agent = "main"
 }) {
+  prompt = resultTransportPrompt(prompt);
+  const responseFile = path.join(options.jobDir, resultFileName.replace(/\.json$/, "") + "-final-response.txt");
+  const assistantMessages = [];
+  options.onTaskProgress?.({ agent, fileName: resultFileName, state: "started" });
   fs.writeFileSync(path.join(options.jobDir, promptFileName), prompt, "utf8");
   removeAgentResultFile(options.jobDir, resultFileName);
   const outputState = { section: "meta" };
@@ -2125,6 +2132,7 @@ async function runCodexTask({
         reportTokenUsage();
       }
       for (const assistantText of extractAssistantOutputTexts(parsedJson)) {
+        if (assistantText) { assistantMessages.push(String(assistantText)); if (assistantMessages.length > 8) assistantMessages.shift(); }
         String(assistantText || "")
           .split(/\r?\n/)
           .forEach((nestedLine) => {
@@ -2176,15 +2184,21 @@ async function runCodexTask({
       "exec",
       "--json",
       "--skip-git-repo-check",
+      "--sandbox", "workspace-write",
+      "--output-last-message", responseFile,
       ...(codexModel ? ["--model", codexModel] : []),
       "-c",
       `model_reasoning_effort=${taskEffort}`,
       "-"
     ];
-    const child = spawn(options.codexCmdPath, args, {
+    fs.rmSync(responseFile, { force: true });
+    assistantMessages.length = 0;
+    const command = invocation(options.codexCmdPath, args);
+    const child = spawn(command.file, command.args, {
       cwd: options.jobDir,
-      windowsHide: false,
-      shell: shouldRunCodexViaShell(options.codexCmdPath)
+      env: command.env,
+      windowsHide: true,
+      shell: false
     });
 
     let settled = false;
@@ -2243,6 +2257,7 @@ async function runCodexTask({
 
     child.stdout.on("data", (chunk) => handleChunk(chunk));
     child.stderr.on("data", (chunk) => handleChunk(chunk, "warn"));
+    child.stdin.on("error", () => {}); // The close/error event reports CLI failures, including early exit.
     child.stdin.end(prompt);
     child.on("error", (error) => settle(createCodexExecutionError(
       `codex.cmd 실행 실패: ${error.message}`,
@@ -2296,8 +2311,10 @@ async function runCodexTask({
   recoverTokenUsageFromSession();
   reportTokenUsage({ final: true });
 
+  const taskResult = collectResult({ jobDir: options.jobDir, fileName: resultFileName, responseFile, assistantMessages });
+  options.onTaskProgress?.({ agent, fileName: resultFileName, state: "completed" });
   return {
-    ...readAgentResult(options.jobDir, resultFileName),
+    ...taskResult,
     tokenUsage: {
       total: fallbackUsage.total + Number(tokenState.total || 0),
       grossTotal: fallbackUsage.grossTotal + Number(tokenState.grossTotal || tokenState.total || 0),
@@ -3327,6 +3344,7 @@ module.exports = {
   runCodexGeneration,
   fetchCodexUsageSnapshot,
   _private: {
+    runCodexTask,
     compactSearchResultsForPrompt,
     compactResearchHandoffForPrompt,
     compactWriterResultForPrompt,

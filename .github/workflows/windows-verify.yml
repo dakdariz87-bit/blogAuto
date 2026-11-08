@@ -17,7 +17,7 @@ jobs:
       - name: Install original dependencies without automatic install scripts
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Launcher and real process timeout tests
-        run: node --test launcher.test.cjs electron-setup.test.cjs setup-supervisor.test.cjs extract-stream.test.cjs codex-connection.test.cjs
+        run: node --test launcher.test.cjs electron-setup.test.cjs setup-supervisor.test.cjs extract-stream.test.cjs codex-connection.test.cjs task-result.test.cjs
       - name: Browser onboarding interactions without live accounts
         run: node verify-onboarding-ui.cjs
       - name: Install Codex CLI for metadata protocol verification
@@ -31,14 +31,14 @@ jobs:
       - name: Create verified Windows bundle
         run: node make-windows-bundle.cjs
       - name: Open the bundled app without Electron installation
-        run: node "$env:RUNNER_TEMP/blogAuto-v0.2.0-Windows-ready/verify-windows-launcher.cjs"
+        run: node "$env:RUNNER_TEMP/blogAuto-v0.2.1-Windows-ready/verify-windows-launcher.cjs"
       - uses: actions/upload-artifact@v4
         with:
-          name: blogAuto-v0.2.0-Windows-ready
-          path: ${{ runner.temp }}/blogAuto-v0.2.0-Windows-ready/
+          name: blogAuto-v0.2.1-Windows-ready
+          path: ${{ runner.temp }}/blogAuto-v0.2.1-Windows-ready/
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-v0.2.0-verification
+          name: windows-v0.2.1-verification
           path: verification-output/

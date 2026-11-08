@@ -138,6 +138,17 @@ function setRunState(status, detail = "") {
   badge.textContent = detail && detail !== status ? detail : (labelMap[status] || status || "대기");
 }
 
+function renderJobProgress(progress) {
+  if (!progress) return;
+  const percent = Math.min(100, Math.max(0, Number(progress.percent) || 0));
+  $('#jobProgressBar').value = percent;
+  $('#jobProgressValue').textContent = percent + '%';
+  $('#jobProgressStage').textContent = progress.stage || '작업 대기';
+  $('#jobProgressNote').textContent = progress.terminal
+    ? (percent === 100 ? '작업이 완료됐습니다. 생성된 본문과 이미지를 확인하세요.' : '완료되지 않았습니다. 아래 진행 상황과 작업 이력에서 원인을 확인하세요.')
+    : '완료한 작업 단계 기준입니다. AI 응답을 기다리는 동안에는 같은 퍼센트를 유지합니다.';
+}
+
 function setTistoryTestButtonDisabled(disabled) {
   const button = $("#tistoryTestButton");
   if (button) button.disabled = disabled;
@@ -1794,6 +1805,7 @@ async function boot() {
   window.blogAuto.onLog(addLog);
   window.blogAuto.onStatus((payload) => {
     state.currentJobId = payload.jobId;
+    renderJobProgress(payload.progress);
     setRunState(payload.status, payload.detail || payload.status);
   });
   window.blogAuto.onTokens((payload) => {
@@ -1821,7 +1833,7 @@ async function boot() {
     }
     setRunState(payload.status, payload.status);
     $("#articlePreview").value = payload.article || $("#articlePreview").value;
-    $("#articleMeta").textContent = payload.title || payload.status || "완료";
+    $("#articleMeta").textContent = payload.reason || payload.title || payload.status || "완료";
     if (payload.title) $("#selectedTitle").textContent = payload.title;
     if (payload.tokenUsage) setTokenTotal(payload.tokenUsage.total || 0);
     if (payload.tokenUsage?.rateLimits) setCodexRateLimits(payload.tokenUsage.rateLimits);
@@ -1833,6 +1845,7 @@ async function boot() {
   $("#jobForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (state.running) return;
+    renderJobProgress({ percent: 0, stage: '작업 요청 중' });
     try {
       if ($("#topicMode").value === "auto") {
         await startAutoPublishing();

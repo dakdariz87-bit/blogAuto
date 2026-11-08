@@ -30,6 +30,9 @@ function getCodexConnection() {
   }
   return codexConnection;
 }
+const { JobProgress } = require("./lib/jobProgress");
+let jobProgress = null;
+let progressJobId = "";
 let mainWindow;
 let activeJob = null;
 const activeNaverSessions = new Map();
@@ -108,7 +111,9 @@ function safeLog(jobId, message, level = "info", agent = "main") {
 }
 
 function updateStatus(jobId, status, detail = "") {
-  emit("job:status", { jobId, status, detail, at: new Date().toISOString() });
+  if (progressJobId !== jobId) { progressJobId = jobId; jobProgress = new JobProgress(); }
+  const progress = jobProgress.status(status, detail);
+  emit("job:status", { jobId, status, detail, progress, at: new Date().toISOString() });
 }
 
 function persistCodexRateLimits(runtimeRoot, rateLimits) {
@@ -1387,6 +1392,12 @@ async function startJob(form) {
         codexCmdPath,
         runtimeRoot,
         jobDir,
+        onTaskProgress: (task) => {
+          if (progressJobId !== jobId || !jobProgress) return;
+          const progress = jobProgress.task(task);
+          generationPhase = progress.stage;
+          updateStatus(jobId, "generating", progress.stage);
+        },
         codexModel,
         topic,
         keyword,
@@ -1916,6 +1927,7 @@ async function startJob(form) {
       article: latestAgentResultForResume?.article || "",
       images: latestAgentResultForResume ? getPreviewImages(latestAgentResultForResume) : [],
       failurePhase: error.failurePhase || "",
+      reason: error.message,
       tokenUsage: jobTokenUsage,
       tags: latestTagsForResume,
       history: readHistory(runtimeRoot)

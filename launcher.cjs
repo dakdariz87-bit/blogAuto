@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.2.0';
+const LAUNCHER_VERSION='0.2.1';
 
 function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
   const env={...original};

@@ -16,13 +16,22 @@ async function main(){
    connectCodex:async()=>{fixture.loginRequests++;return{waiting:true}},cancelCodexLogin:async()=>{},onCodexLoginComplete:()=>{},
    saveSettings:async settings=>(fixture.settings={...fixture.settings,...settings}),saveAccountStore:async store=>(fixture.store=store),
    checkAccountSession:async id=>{fixture.sessionRequests++;fixture.store.accounts.find(a=>a.id===id).sessionStatus='valid';return{status:'valid'}},
-   startJob:async()=>{fixture.jobs++},onAccountsUpdate:()=>{},onLog:()=>{},onStatus:()=>{},onTokens:()=>{},onPreview:()=>{},onSelectedTitle:()=>{},onComplete:()=>{},
+   startJob:async()=>{fixture.jobs++},onAccountsUpdate:()=>{},onLog:()=>{},onStatus:handler=>fixture.onStatus=handler,onTokens:()=>{},onPreview:()=>{},onSelectedTitle:()=>{},onComplete:()=>{},
    openRuntimeFolder:async()=>{},openChromeInstallAndQuit:async()=>{},loadHistory:async()=>[]};
  });
  try{
  await page.goto('http://127.0.0.1:'+server.address().port+'/');
  await page.getByText('2개 모델 조회됨.',{exact:false}).waitFor();
  assert.equal(await page.locator('#chatgptConnectionBadge').innerText(),'연결됨');
+ assert.equal(await page.locator('#jobProgressBar').getAttribute('value'),'0');
+ await page.evaluate(()=>window.fixture.onStatus({jobId:'fixture',status:'generating',progress:{percent:35,stage:'본문 작성 중'}}));
+ assert.equal(await page.locator('#jobProgressValue').innerText(),'35%');
+ await page.evaluate(()=>window.fixture.onStatus({jobId:'fixture',status:'failed',progress:{percent:35,stage:'중단 · 응답 오류',terminal:true}}));
+ assert.equal(await page.locator('#jobProgressBar').getAttribute('value'),'35');
+ assert.match(await page.locator('#jobProgressNote').innerText(),/완료되지 않았/);
+ await page.evaluate(()=>window.fixture.onStatus({jobId:'next-fixture',status:'generated',progress:{percent:100,stage:'초안 완성',terminal:true}}));
+ assert.equal(await page.locator('#jobProgressValue').innerText(),'100%');
+
  const modelBox=await page.locator('#codexModel').boundingBox(),effortBox=await page.locator('#mainAgentModel').boundingBox();assert.ok(modelBox.x+modelBox.width<=effortBox.x,'Model and effort controls overlap');
  await page.locator('#codexModel').selectOption('gpt-6-astra');await page.waitForFunction(()=>window.fixture.settings.codexModel==='gpt-6-astra');
  assert.equal(await page.locator('option[value="gpt-6.1-terra"]').evaluate(option=>option.disabled),true);
@@ -41,7 +50,7 @@ async function main(){
  await page.locator('#refreshChatgptButton').click();
  await page.locator('#openHelpButton').click();assert.equal(await page.locator('#usageGuide').isVisible(),true);await page.locator('#closeHelpButton').click();
  await page.screenshot({path:'verification-output/onboarding-ui.png',fullPage:true});
- assert.deepEqual(errors,[]);console.log('Onboarding UI: Astra selection/save, unavailable models, URL validation, account reuse, first draft, help and login without publishing passed.');
+ assert.deepEqual(errors,[]);console.log('Onboarding UI: Astra selection/save, unavailable models, URL validation, account reuse, first draft, help, stage percentages and failure preservation, and login without publishing passed.');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 }
 fs.mkdirSync('verification-output',{recursive:true});main().catch(error=>{console.error(error);process.exitCode=1});
