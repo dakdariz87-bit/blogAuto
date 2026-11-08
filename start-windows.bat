@@ -11,8 +11,6 @@ if not exist node_modules\playwright (
   call npm install
   if errorlevel 1 goto fail
 )
-call npx playwright install chromium
-if errorlevel 1 goto fail
 call npm start
 pause
 exit /b
