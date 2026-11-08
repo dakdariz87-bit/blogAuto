@@ -16,15 +16,29 @@ export function editorAction(mode, post) {
     return null;
   };
   const title = pick(['.se-documentTitle .se-text-paragraph', '.se-section-documentTitle .se-text-paragraph', '.se-documentTitle [contenteditable="true"]']);
-  const body = pick(['.se-main-container .se-component.se-text .se-text-paragraph', '.se-main-container .se-component.se-text [contenteditable="true"]']);
-  if (!title || !body) return { found: false, reason: '제목·본문 영역을 정확히 찾지 못했습니다. 새 글 로딩과 도움말 창을 확인해주세요.' };
-  const components = [...document.querySelectorAll('.se-main-container .se-component')].filter(visible);
+  const body = pick([
+    '.se-main-container .se-component.se-text .se-text-paragraph',
+    '.se-content .se-component.se-text .se-text-paragraph',
+    '.se-component.se-text .se-text-paragraph',
+    '.se-section-text .se-text-paragraph',
+    '.se-component.se-text [contenteditable="true"]'
+  ]);
+  const counts = {};
+  for (const selector of ['.se-documentTitle', '.se-section-documentTitle', '.se-component.se-text', '.se-text-paragraph', '[contenteditable="true"]', 'iframe']) {
+    counts[selector] = [...document.querySelectorAll(selector)].filter(visible).length;
+  }
+  const diagnostic = { title: Boolean(title), body: Boolean(body), counts };
+  if (!title || !body) return { found: false, diagnostic, reason: '제목·본문 영역을 정확히 찾지 못했습니다. 새 글 로딩과 도움말 창을 확인해주세요.' };
+  const editorRoot = body.closest('.se-content, .se-main-container') || document;
+  const components = [...editorRoot.querySelectorAll('.se-component')].filter(visible);
   const nonText = components.filter(el => !el.classList.contains('se-documentTitle') && !el.classList.contains('se-text'));
   if (text(title) || text(body) || nonText.length) return { found: true, ready: false, reason: '이미 내용 또는 이미지가 있습니다. 덮어쓰지 않았습니다. 새 빈 글에서 실행해주세요.' };
   if (mode === 'probe') return { found: true, ready: true };
   if (!post?.title?.trim() || !post?.body?.trim()) return { found: true, ready: false, reason: '초안의 제목과 본문을 채워주세요.' };
   function insert(el, value) {
     el.scrollIntoView({ block: 'center' });
+    const editingHost = el.closest('[contenteditable="true"]');
+    if (editingHost) editingHost.focus();
     el.click();
     el.focus();
     const selection = window.getSelection();
