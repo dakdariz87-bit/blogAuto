@@ -14,6 +14,7 @@ try {
   title.value = draft.title;
   body.value = draft.body;
   loaded = true;
+  status.textContent = '버전 0.2.1 · 빈 새 글에서 입력해주세요.';
   update();
 } catch (error) { status.textContent = error.message; }
 button.addEventListener('click', async () => {
@@ -27,7 +28,10 @@ button.addEventListener('click', async () => {
     status.textContent = '편집기를 확인하는 중입니다…';
     const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, world: 'MAIN', func: editorAction, args: ['probe'] });
     const found = results.filter(result => result.result?.found);
-    if (found.length !== 1) throw new Error('제목·본문 영역을 정확히 찾지 못했습니다. 새 글 로딩과 도움말 창을 확인해주세요.');
+    if (found.length !== 1) {
+      const diagnostics = results.map(item => ({ frame: item.frameId, ...item.result?.diagnostic }));
+      throw new Error('입력 위치를 찾지 못했습니다. 아래 진단을 캡처해서 보내주세요. 글 내용과 로그인 정보는 포함하지 않습니다.\\n버전 0.2.1\\n' + JSON.stringify(diagnostics, null, 2));
+    }
     if (!found[0].result.ready) throw new Error(found[0].result.reason);
     const input = await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [found[0].frameId] }, world: 'MAIN', func: editorAction, args: ['insert', { title: title.value, body: body.value }] });
     if (!input[0]?.result?.inserted) throw new Error(input[0]?.result?.reason || '입력을 확인하지 못했습니다. 네이버 화면을 확인해주세요.');
