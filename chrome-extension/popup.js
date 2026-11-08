@@ -51,7 +51,7 @@ $('#open-blog').addEventListener('click',async()=>{
     await chrome.storage.local.set({[stateKey()]:{title:title.value,body:body.value,align:$('#align').value,slots}});
     await chrome.tabs.update(target.id,{active:true});
     await chrome.windows.update(target.windowId,{focused:true});
-    status.textContent='네이버 글쓰기 탭을 열었습니다. 편집기로 돌아와 초안을 입력하세요.';
+    status.textContent='네이버 글쓰기 탭을 열었습니다. 새 탭인 경우 그 탭에서 퍼즐 아이콘으로 확장 프로그램을 한 번 다시 열어 입력 권한을 부여해주세요.';
   }catch(error){status.textContent=error.message;}
 });
 $('#large').addEventListener('click',async()=>{
