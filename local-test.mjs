@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import readline from 'node:readline/promises';
@@ -44,8 +45,22 @@ async function main() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   let context;
   try {
+    const browserOptions = {};
+    if (process.platform === 'win32') {
+      const locations = [
+        [process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe'],
+        [process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe'],
+        [process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'],
+        [process.env.PROGRAMFILES, 'Microsoft', 'Edge', 'Application', 'msedge.exe'],
+        [process.env['PROGRAMFILES(X86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe'],
+        [process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe'],
+      ].filter(parts => parts[0]).map(parts => path.join(...parts));
+      browserOptions.executablePath = locations.find(candidate => existsSync(candidate));
+      if (!browserOptions.executablePath) throw new Error('Chrome 또는 Edge를 설치한 뒤 다시 실행해주세요.');
+      console.log('PC에 설치된 브라우저를 사용합니다. 별도 브라우저 다운로드는 없습니다.');
+    }
     context = await chromium.launchPersistentContext(path.join(local, 'browser-profile'), {
-      headless: false, viewport: null, args: ['--start-maximized'],
+      ...browserOptions, headless: false, viewport: null, args: ['--start-maximized'],
     });
     const page = context.pages()[0] || await context.newPage();
     await page.goto('https://nid.naver.com/nidlogin.login', { waitUntil: 'domcontentloaded' });
