@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>블로그 초안 입력</title>
+<style>body{width:390px;margin:20px;font:14px system-ui;color:#243d2e}h1{font-size:20px}textarea{box-sizing:border-box;width:100%;margin:8px 0 14px;padding:10px;border:1px solid #b9cbbd;border-radius:8px;font:14px system-ui}button{width:100%;padding:12px;background:#226843;color:white;border:0;border-radius:8px;font:inherit;cursor:pointer}button:disabled{opacity:.5}p{line-height:1.6}#status{white-space:pre-wrap}a{color:#226843}</style></head>
+<body><h1>블로그 초안 입력</h1><p>대상 블로그: <strong>dakdariz</strong><br>평소 쓰는 크롬에서 로그인한 뒤 새 글을 열어주세요.</p>
+<p><a href="https://blog.naver.com/PostWriteForm.naver?blogId=dakdariz" target="_blank" rel="noreferrer">네이버 새 글 열기 ↗</a></p>
+<label for="title">제목</label><textarea id="title" rows="2"></textarea>
+<label for="body">본문</label><textarea id="body" rows="9"></textarea>
+<p><label><input id="confirm" type="checkbox"> dakdariz의 빈 새 글이며, 위 초안 입력을 승인합니다.</label></p>
+<button id="insert" disabled>제목·본문 입력하기</button><p id="status" role="status"></p>
+<p>사진은 네이버 사진 버튼으로 첨부하고, 전체 내용을 확인한 뒤 직접 발행해주세요. 이 버전은 자동 발행하지 않습니다.</p>
+<script type="module" src="popup.js"></script></body></html>
