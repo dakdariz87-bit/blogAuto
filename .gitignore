@@ -2,3 +2,17 @@ node_modules/
 .local/
 assets/*
 !assets/README.md
+desktop/runtime/
+desktop/node_modules/
+desktop/dist/
+desktop/.test-runtime/
+desktop/**/browser-profile/
+desktop/**/browser-profiles/
+desktop/**/account-chrome/
+desktop/**/extension-connections.json
+desktop/**/extension-tasks.json
+desktop/**/user-settings.json
+desktop/**/account-categories.json
+desktop/**/blog_history.jsonl
+desktop/**/*.log
+desktop/.env*
