@@ -14,8 +14,13 @@ test('기존 방식이 놓친 상위 요소의 편집 권한을 사용하고 재
     assert.equal((await action(['insert',post])).inserted,true);
     assert.notEqual((await action(['insert',post])).inserted,true);
     assert.equal((await page.locator('.se-documentTitle').innerText()).match(/테스트 제목/g).length,1);
+    await page.setContent('<div class="se-content" contenteditable="true"><div class="se-documentTitle"><p class="se-text-paragraph"><br></p></div><div class="se-component se-text"><p class="se-text-paragraph"><br></p></div></div>');
+    assert.equal((await action(['probe'])).ready,true);
+    assert.equal((await action(['insert',post])).inserted,true);
     await page.setContent('<p>다른 페이지</p>');
-    assert.equal((await action(['probe'])).found,false);
+    const missing = await action(['probe']);
+    assert.equal(missing.found,false);
+    assert.equal(missing.diagnostic.counts['.se-text-paragraph'],0);
     await page.setContent('<div contenteditable="true"><div class="se-documentTitle"><p class="se-text-paragraph"></p></div><div class="se-main-container"><div class="se-component se-text"><p class="se-text-paragraph"></p></div><div class="se-component se-image">image</div></div></div>');
     assert.equal((await action(['probe'])).ready,false);
   } finally { await browser.close(); }
