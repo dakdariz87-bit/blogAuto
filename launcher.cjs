@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawnSync}=require('node:child_process');
-const LAUNCHER_VERSION='0.1.3';
+const LAUNCHER_VERSION='0.1.4';
 
 function windowsEnvironment(original,nodeExecutable,extraDirs=[],pathApi=path.win32){
   const env={...original};
@@ -23,7 +23,7 @@ function codexInvocation(command,args,nodeExecutable=process.execPath,exists=fs.
 function ensureElectronInstalled(root,env,runner=spawnSync){
   const packageDir=path.join(root,'node_modules','electron');
   const setup=path.join(__dirname,'electron-setup.cjs');
-  if(!fs.existsSync(setup))throw new Error('v0.1.3의 electron-setup.cjs 파일도 기존 폴더에 함께 복사해주세요.');
+  if(!fs.existsSync(setup))throw new Error('electron-setup.cjs 파일도 기존 폴더에 함께 복사해주세요.');
   const {electronReady}=require(setup);
   const executable=path.join(packageDir,'dist','electron.exe');
   if(electronReady(packageDir))return executable;
