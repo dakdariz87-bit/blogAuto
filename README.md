@@ -1,21 +1,103 @@
-# 네이버 블로그 자동화 관리
+이 저장소는 기존 버전입니다. Chrome 확장프로그램 기반 새 버전은 [naverblog-extention](https://github.com/boksajang/naverblog-extention)에서 확인해 주세요.
 
-## 새 권장 실행 방식
+# Blogauto Naver + Tistory
 
-공유받은 boksajang 소스의 후속판을 바탕으로 **검토 후 승인** 방식의 데스크톱 앱을 추가했습니다.
+> [!IMPORTANT]
+> **Naver 로그인 방식이 자동 로그인에서 수동 로그인으로 변경되었습니다.**
+>
+> 계정 보호를 위해 프로그램이 Naver 아이디와 비밀번호를 자동으로 입력하거나 로그인 버튼을 누르지 않습니다. 이에 따라 계정 관리 화면의 **Naver ID 및 Password 입력 항목도 제거되었습니다.** 계정에는 블로그 주소의 `Blog ID`만 등록하고, 세션 확인 또는 발행 중 로그인·캡챠 화면이 열리면 사용자가 해당 Chrome 창에서 아이디와 비밀번호를 직접 입력해 로그인해야 합니다. 로그인 완료 후에는 전용 Chrome 프로필에 저장된 세션을 재사용합니다.
 
-1. 전체 ZIP을 다운로드하고 압축을 풉니다.
-2. `desktop/start-windows.cmd`를 실행합니다. Node.js 24 이상과 Chrome이 필요합니다.
-3. Codex CLI가 없다면 `desktop/setup-codex.cmd`로 설치·로그인합니다.
-4. 앱에서 실제 카테고리와 `dakdariz` 계정을 확인하고 동반 확장을 연결합니다.
-5. 초안과 그림 생성 → 전체 검토 → 승인 후 네이버 임시저장/발행 순서입니다.
+Codex 기반 Windows 데스크톱 자동화 콘솔입니다. Naver Blog 글 생성/발행을 기본 흐름으로 사용하고, Naver 발행이 성공하면 같은 제목, 본문, 이미지, 카테고리, 태그를 Tistory 블로그에도 이어서 발행할 수 있습니다.
 
-[자세한 실행 안내](desktop/README.md) · [원본 분석과 변경 사항](desktop/ANALYSIS.md)
+## 주요 기능
 
-최초 테스트는 임시저장으로 진행하세요. Windows와 실제 네이버 발행은 아직 검증되지 않았습니다. 실행용 소스이며 빌드된 EXE는 아닙니다.
+- Naver 계정 여러 개와 계정별 카테고리 관리
+- 카테고리별 키워드, 발행 목적, 검색 채널, 블로그 신뢰 설정 관리
+- Research/Title Agent, Writer Agent, Main Review Agent, Image Worker 기반 글 생성
+- 현재성/공식성/신뢰매체 근거 검증
+- Naver 세션 확인, 수동 보안 확인 후 세션 재사용
+- Tistory Kakao 로그인 세션 확인 및 재사용
+- Naver 발행 성공 후 Tistory 동일 글 자동 발행
+- Tistory-only 테스트 발행
+- 공개, 비공개, 예약 발행 설정
+- 제목 이미지와 본문 이미지 생성 및 업로드
+- 태그 입력, 카테고리 매칭, 인용구 스타일 변환
 
-## 이전 단독 확장
+## 기본 흐름
 
-기존 [chrome-extension](chrome-extension/README.md)과 [첫 글 초안](posts/001-posture.md)은 보존했습니다. 새 데스크톱 앱의 동반 확장은 `desktop/extension`이며 서로 다른 프로그램입니다. 새 앱을 사용할 때 이전 단독 확장은 꺼두세요.
+1. 계정 표시명과 Naver `Blog ID`, 카테고리, 키워드, 발행 목적을 설정합니다.
+2. 필요하면 세션 일괄 확인으로 Naver와 Tistory 로그인 상태를 확인하고, 로그인 화면이 나오면 직접 로그인합니다.
+3. Research/Title Agent가 주제와 제목 후보를 고르고 검색 근거를 수집합니다.
+4. Writer Agent가 본문과 태그, 이미지 프롬프트를 작성합니다.
+5. Main Review Agent가 제목 일치, 근거 신뢰도, 본문 품질, 독자 가치, 현재성 기준을 검토합니다.
+6. Image Worker가 이미지를 생성합니다.
+7. Naver Blog에 글을 작성하고 발행합니다.
+8. Tistory 발행 옵션이 켜져 있고 세션이 유효하면 같은 글을 Tistory에도 발행합니다.
 
-개인 원고, 로그인 정보, 로컬 연결 토큰, API 키는 GitHub에 올리지 않습니다. 후속판 소스의 MIT 라이선스와 제3자 고지는 desktop 폴더에 보존했습니다.
+## 검색과 근거 기준
+
+정책, 채용, 지원금, 신청, 모집, 법률, 가격, 일정처럼 독자 행동에 직접 영향을 주는 글은 공식 또는 기관 근거를 우선합니다.
+
+AI 업계동향, 기술 발표, 모델 출시, 반도체 시장 변화 같은 글은 Naver Blog 후보만으로 확정하지 않습니다. 공식 출처가 없더라도 독립 편집 매체 또는 신뢰 가능한 웹 근거가 함께 확인되어야 합니다. 블로그 후보는 주제 발견 단서로 사용할 수 있지만, 블로그만으로 발표형 글을 발행하지 않습니다.
+
+## 실행
+
+```bash
+npm install
+npm start
+```
+
+검사:
+
+```bash
+npm run check
+```
+
+빌드:
+
+```bash
+npm run dist
+```
+
+저장된 작업 실행:
+
+```bash
+npm run run:saved
+```
+
+최신 생성 결과 발행:
+
+```bash
+npm run publish:latest
+```
+
+## Tistory 테스트
+
+앱 화면의 `Tistory 테스트 발행` 버튼을 사용하면 Naver 글 생성과 Naver 발행을 건너뛰고 Tistory 로그인, 본문 입력, 이미지 업로드, 카테고리 선택, 태그 입력, 최종 발행 흐름만 빠르게 테스트할 수 있습니다.
+
+## 로컬 데이터와 계정정보
+
+계정 설정, 세션, 브라우저 프로필, 작업 로그, 생성 이미지, 빌드 결과는 Git에 올리지 않습니다. Naver 비밀번호는 앱에 입력하거나 저장하지 않습니다. 대표 제외 대상은 다음과 같습니다.
+
+- `runtime/`
+- `dist/`
+- `node_modules/`
+- `**/user-settings.json`
+- `**/account-categories.json`
+- `**/account-assets/`
+- `**/browser-profile/`
+- `**/browser-profiles/`
+- `.env`, `.env.*`, `*.local`
+- `.codex/`, `.agents/`
+
+## 주요 파일
+
+- `src/main.js`: Electron main process, 작업 흐름, 세션 확인, Naver/Tistory 발행 오케스트레이션
+- `src/lib/codexRunner.js`: Research/Title, Writer, Main Review, Image Worker 실행과 프롬프트 구성
+- `src/lib/search.js`: 검색 후보 수집, 공식/기관/독립 신뢰 근거 판정, source quality 요약
+- `src/lib/naverPublisher.js`: Naver 수동 로그인 대기, 글쓰기 편집기, 이미지/카테고리/태그/발행 자동화
+- `src/lib/tistoryPublisher.js`: Tistory Kakao 세션, TinyMCE 본문 입력, 이미지/카테고리/태그/발행 자동화
+- `src/lib/accountStore.js`: 계정과 카테고리 저장 구조
+- `src/lib/settings.js`: 앱 설정 기본값과 정규화
+- `src/renderer/`: Electron renderer UI
+- `scripts/check.js`: 프로젝트 구조와 핵심 회귀 조건 검사

@@ -1,18 +1,51 @@
+# Dependencies
 node_modules/
-.local/
-assets/*
-!assets/README.md
-desktop/runtime/
-desktop/node_modules/
-desktop/dist/
-desktop/.test-runtime/
-desktop/**/browser-profile/
-desktop/**/browser-profiles/
-desktop/**/account-chrome/
-desktop/**/extension-connections.json
-desktop/**/extension-tasks.json
-desktop/**/user-settings.json
-desktop/**/account-categories.json
-desktop/**/blog_history.jsonl
-desktop/**/*.log
-desktop/.env*
+
+# Runtime data and local user state
+runtime/
+dist/runtime/
+**/user-settings.json
+**/account-categories.json
+**/blog_history.jsonl
+**/account-assets/
+**/browser-profile/
+**/browser-profiles/
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.local
+!.env.example
+
+# Build artifacts
+dist/
+build/
+out/
+release/
+*.exe
+*.msi
+*.asar
+*.zip
+*.7z
+*.dmg
+*.pkg
+
+# Browser/cache/database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+
+# Local agent/app metadata
+.agents/
+.codex/
+.flovix/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
