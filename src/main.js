@@ -495,20 +495,7 @@ function keywordLaneResultPayload(laneResult = {}) {
 }
 
 function mergeSearchResults(...groups) {
-  const merged = [];
-  const seen = new Set();
-  for (const group of groups) {
-    for (const item of Array.isArray(group) ? group : []) {
-      const key = String(item?.url || item?.fetchedUrl || "").replace(/[#?].*$/, "");
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      merged.push(item);
-    }
-  }
-  return merged.slice(0, 20).map((item, index) => ({
-    ...item,
-    sourceId: item.sourceId || `${item.provider || "source"}-${index + 1}`
-  }));
+  return require('./lib/institutionEvidence').mergeEvidence(...groups);
 }
 
 function selectSearchTopicForResearch(researchResult, context = {}) {

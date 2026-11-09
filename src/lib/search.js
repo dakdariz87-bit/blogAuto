@@ -1,3 +1,4 @@
+const { neckDeskSources, mergeEvidence } = require('./institutionEvidence');
 const http = require("node:http");
 const https = require("node:https");
 
@@ -117,7 +118,8 @@ function freshnessSearchSuffix(options = {}) {
   return freshnessDateHints(options).slice(0, 8).join(" ");
 }
 
-function fetchText(url) {
+function fetchText(url, redirects = 0) {
+  if (redirects > 5) return Promise.reject(new Error("리디렉션 한도 초과"));
   return new Promise((resolve, reject) => {
     const client = /^http:\/\//i.test(url) ? http : https;
     const request = client.get(url, {
@@ -128,9 +130,11 @@ function fetchText(url) {
       timeout: 12000
     }, (response) => {
       if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        fetchText(new URL(response.headers.location, url).toString()).then(resolve, reject);
+        response.resume();
+        fetchText(new URL(response.headers.location, url).toString(), redirects + 1).then(resolve, reject);
         return;
       }
+      if (response.statusCode !== 200) { response.resume(); reject(new Error("HTTP " + response.statusCode)); return; }
       let body = "";
       response.setEncoding("utf8");
       response.on("data", (chunk) => {
@@ -441,6 +445,7 @@ function extractAuthorityLinks(html, baseUrl = "") {
 }
 
 function candidateMatchesSearchIntent(candidate, options) {
+  if (neckDeskSources(options).some(seed => seed.url === candidate.url)) return true;
   const searchText = `${candidate.title || ""} ${candidate.url || ""}`.toLowerCase();
   const keywordTokens = tokenize(options.keyword || "");
   const topicTokens = tokenize(compactTopicForSearch(options.topic || "", options.keyword || ""));
@@ -550,6 +555,11 @@ function scoreCandidate(candidate, commonTokens, options, profile = buildSearchP
   const topicMatchedTerms = [];
   const keywordMatchedTerms = [];
 
+  if (neckDeskSources(options).some(seed => seed.url === candidate.url)
+    && /neck|shoulder|posture|workstation|screen|display|computer/i.test(candidate.excerpt || '')) {
+    score += 6;
+    topicMatchedTerms.push('목·어깨 및 화면 작업 기관 원문');
+  }
   for (const token of commonTokens) {
     if (textTokens.has(token)) {
       score += 1;
@@ -946,6 +956,8 @@ async function collectSearchResults(options, log = () => {}) {
   const fallback = String(options.fallbackProvider || "google").toLowerCase();
   const providers = [primary, fallback];
   const profile = buildSearchProfile(options);
+  const institutionCandidates = neckDeskSources(options);
+  if (institutionCandidates.length) { profile.strictEvidence = true; profile.authorityEvidence = true; }
   const queryVariants = normalizeSearchQueries(options.searchQueries);
   const attemptedProviders = new Set();
   const providerControl = {
@@ -972,7 +984,8 @@ async function collectSearchResults(options, log = () => {}) {
     return collected;
   };
   const initialFreshnessSuffix = profile.highFreshness ? freshnessSearchSuffix(options) : "";
-  let all = await collectRawCandidates(initialFreshnessSuffix);
+  let all = [...institutionCandidates, ...await collectRawCandidates(initialFreshnessSuffix)];
+  if (institutionCandidates.length) log('목·어깨와 앉은 자세 주제: NHS/HSE 기관 원문을 직접 수집합니다.');
 
   const buildFilteredCandidates = (items) => {
     const seen = new Set();
@@ -985,7 +998,7 @@ async function collectSearchResults(options, log = () => {}) {
       })
       .filter((item) => !isLowValueResult(item.title, item.url))
       .filter((item) => candidateMatchesSearchIntent(item, options));
-    return buildCandidateFetchList(filtered, profile, 20);
+    return buildCandidateFetchList(mergeEvidence(institutionCandidates, filtered), profile, 20);
   };
   let candidates = buildFilteredCandidates(all);
 
@@ -1082,8 +1095,8 @@ async function collectSearchResults(options, log = () => {}) {
     return candidates;
   }
   log(`본문 추출 ${withContent.length}개, 공통 주제 후보 ${selected.length}개를 사용합니다.`);
-  return selected.map((item, index) => ({
-    sourceId: `${item.provider || "source"}-${index + 1}`,
+  return mergeEvidence(selected).map((item, index) => ({
+    sourceId: item.sourceId || `${item.provider || "source"}-${index + 1}`,
     provider: item.provider,
     title: item.title,
     url: item.url,
@@ -1193,6 +1206,7 @@ module.exports = {
   summarizeSourceQuality,
   _private: {
     naverSearchTemplateFor,
+    fetchCandidateContent,
     extractReadableText,
     buildQueryText,
     buildSearchProfile,
